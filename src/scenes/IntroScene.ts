@@ -1,5 +1,9 @@
 
 import Phaser from 'phaser';
+import {
+  SCREEN_WIDTH,
+  SCREEN_HEIGHT
+} from '../ui/Menuui';
 
 export class IntroScene extends Phaser.Scene {
   private music?: Phaser.Sound.BaseSound;
@@ -37,60 +41,63 @@ export class IntroScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#101827');
 
+    const centerX = SCREEN_WIDTH / 2;
+    const centerY = SCREEN_HEIGHT / 2;
+
     // Fondo decorativo.
     this.add.rectangle(
-      480,
-      270,
-      960,
-      540,
+      centerX,
+      centerY,
+      SCREEN_WIDTH,
+      SCREEN_HEIGHT,
       0x101827
     );
 
     // Logo.
     this.logo = this.add.image(
-      480,
-      170,
+      centerX,
+      230,
       'game-logo'
     );
 
     // Conservamos la proporción original del logo.
     const logoScale = Math.min(
-      380 / this.logo.width,
-      190 / this.logo.height
+      500 / this.logo.width,
+      250 / this.logo.height
     );
 
     this.logo.setScale(logoScale);
 
     // Créditos.
     this.add.text(
-      480,
-      330,
+      centerX,
+      430,
       'Un juego creado por Josue Serna',
       {
         color: '#ffffff',
-        fontSize: '19px',
+        fontSize: '23px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);
 
     this.add.text(
-      480,
-      365,
+      centerX,
+      470,
       'Este proyecto no tiene fines de monetización.',
       {
         color: '#aaaaaa',
-        fontSize: '15px'
+        fontSize: '18px'
       }
     ).setOrigin(0.5);
 
     // Instrucción para comenzar.
     this.startText = this.add.text(
-      480,
-      455,
+      centerX,
+      600,
       'PULSA CUALQUIER TECLA PARA JUGAR',
       {
         color: '#75c9c8',
-        fontSize: '21px',
+        fontSize: '25px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);

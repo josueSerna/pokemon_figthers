@@ -1,3 +1,4 @@
+
 import Phaser from 'phaser';
 import { getStages } from '../stages/registry';
 import type { StageDefinition } from '../stages/types';
@@ -9,7 +10,6 @@ import {
 
 type Action = 'left' | 'right' | 'up' | 'down' | 'confirm' | 'cancel';
 
-/** Un elemento de la cuadrícula: un escenario, o la casilla "Aleatorio". */
 interface StageItem {
   stage?: StageDefinition;
   name: string;
@@ -26,7 +26,6 @@ export class StageSelectScene extends Phaser.Scene {
   private items: StageItem[] = [];
   private cards: CardView[] = [];
 
-  /** Datos de la partida que vienen de la selección de personajes. */
   private matchData: Record<string, unknown> = {};
   private mode: 1 | 2 = 1;
 
@@ -50,16 +49,16 @@ export class StageSelectScene extends Phaser.Scene {
     cancel: false
   };
 
-  // Layout.
+  // Layout para 1280 x 720.
   private readonly columns = 3;
   private readonly visibleRows = 3;
-  private readonly cardWidth = 150;
-  private readonly cardHeight = 118;
-  private readonly gap = 10;
-  private readonly gridLeft = 40;
-  private readonly gridTop = 104;
+  private readonly cardWidth = 190;
+  private readonly cardHeight = 150;
+  private readonly gap = 16;
+  private readonly gridLeft = 55;
+  private readonly gridTop = 145;
 
-  private readonly previewCenterX = 742;
+  private readonly previewCenterX = 990;
 
   constructor() {
     super('StageSelectScene');
@@ -101,32 +100,33 @@ export class StageSelectScene extends Phaser.Scene {
     drawHeader(this, 'ELIGE EL ESCENARIO');
 
     // Paneles.
-    this.add.rectangle(275, 292, 510, 420, 0x18263b)
+    this.add.rectangle(375, 390, 650, 500, 0x18263b)
       .setStrokeStyle(2, 0x526581);
-    this.add.rectangle(742, 292, 395, 420, 0x18263b)
+
+    this.add.rectangle(990, 390, 530, 500, 0x18263b)
       .setStrokeStyle(2, 0x526581);
 
     this.items.forEach((item, index) => this.createCard(item, index));
 
-    this.scrollUp = this.add.text(275, 90, '▲', {
+    this.scrollUp = this.add.text(375, 128, '▲', {
       color: '#75c9c8',
-      fontSize: '14px'
+      fontSize: '18px'
     }).setOrigin(0.5);
 
-    this.scrollDown = this.add.text(275, 494, '▼', {
+    this.scrollDown = this.add.text(375, 655, '▼', {
       color: '#75c9c8',
-      fontSize: '14px'
+      fontSize: '18px'
     }).setOrigin(0.5);
 
     this.createPreviewPanel();
 
     this.add.text(
-      480,
-      521,
+      640,
+      695,
       '← → ↑ ↓  MOVER     ENTER / F / A  CONFIRMAR     ESC / G / B  VOLVER',
       {
         color: '#75c9c8',
-        fontSize: '13px',
+        fontSize: '16px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);
@@ -148,7 +148,7 @@ export class StageSelectScene extends Phaser.Scene {
   private createCard(item: StageItem, index: number) {
     const w = this.cardWidth;
     const h = this.cardHeight;
-    const barHeight = 22;
+    const barHeight = 28;
 
     const container = this.add.container(0, 0);
 
@@ -168,7 +168,7 @@ export class StageSelectScene extends Phaser.Scene {
     } else {
       container.add(
         this.add.text(0, areaCenterY, item.stage ? '🖼️' : '🎲', {
-          fontSize: '38px'
+          fontSize: '46px'
         }).setOrigin(0.5)
       );
     }
@@ -182,7 +182,7 @@ export class StageSelectScene extends Phaser.Scene {
 
     const label = this.add.text(0, barY, item.name, {
       color: '#ffffff',
-      fontSize: '12px',
+      fontSize: '15px',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
@@ -196,7 +196,7 @@ export class StageSelectScene extends Phaser.Scene {
     if (!item.available) {
       container.add(this.add.rectangle(0, 0, w, h, 0x000000, 0.55));
       container.add(
-        this.add.text(0, areaCenterY, '🔒', { fontSize: '30px' }).setOrigin(0.5)
+        this.add.text(0, areaCenterY, '🔒', { fontSize: '38px' }).setOrigin(0.5)
       );
     }
 
@@ -223,7 +223,6 @@ export class StageSelectScene extends Phaser.Scene {
     this.cards.push({ container, frame });
   }
 
-  /** Coloca las tarjetas según el scroll y oculta las que no se ven. */
   private layoutCards() {
     this.cards.forEach(({ container }, index) => {
       const row = Math.floor(index / this.columns);
@@ -251,37 +250,37 @@ export class StageSelectScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------
-  // Panel derecho (vista previa)
+  // Panel derecho
   // ---------------------------------------------------------------------
 
   private createPreviewPanel() {
     const x = this.previewCenterX;
 
-    this.add.rectangle(x, 205, 360, 200, 0x0b1220)
+    this.add.rectangle(x, 300, 460, 270, 0x0b1220)
       .setStrokeStyle(2, 0x000000);
 
-    this.previewPlaceholder = this.add.text(x, 205, '🖼️', {
-      fontSize: '64px'
+    this.previewPlaceholder = this.add.text(x, 300, '🖼️', {
+      fontSize: '80px'
     }).setOrigin(0.5);
 
-    this.nameText = this.add.text(x, 330, '', {
+    this.nameText = this.add.text(x, 465, '', {
       color: '#ffffff',
-      fontSize: '24px',
+      fontSize: '32px',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.statusText = this.add.text(x, 362, '', {
+    this.statusText = this.add.text(x, 510, '', {
       color: '#8be28b',
-      fontSize: '13px',
+      fontSize: '17px',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.descriptionText = this.add.text(x, 390, '', {
+    this.descriptionText = this.add.text(x, 545, '', {
       color: '#b9c6d8',
-      fontSize: '13px',
+      fontSize: '17px',
       align: 'center',
-      lineSpacing: 5,
-      wordWrap: { width: 350 }
+      lineSpacing: 7,
+      wordWrap: { width: 450 }
     }).setOrigin(0.5, 0);
   }
 
@@ -290,12 +289,10 @@ export class StageSelectScene extends Phaser.Scene {
 
     if (!item) return;
 
-    // Marco de la tarjeta elegida.
     this.cards.forEach(({ frame }, index) => {
       frame.setVisible(index === this.selected);
     });
 
-    // Mantener visible la fila elegida.
     const row = Math.floor(this.selected / this.columns);
 
     if (row < this.scrollRow) {
@@ -306,7 +303,6 @@ export class StageSelectScene extends Phaser.Scene {
 
     this.layoutCards();
 
-    // Textos.
     this.nameText?.setText(item.name);
 
     this.descriptionText?.setText(
@@ -317,7 +313,6 @@ export class StageSelectScene extends Phaser.Scene {
       ?.setText(item.available ? 'DISPONIBLE' : 'BLOQUEADO')
       .setColor(item.available ? '#8be28b' : '#f29b9b');
 
-    // Imagen grande.
     const key = item.stage ? this.previewKey(item.stage) : '';
 
     if (key && this.textures.exists(key)) {
@@ -326,10 +321,10 @@ export class StageSelectScene extends Phaser.Scene {
       if (this.previewImage) {
         this.previewImage.setTexture(key).setVisible(true);
       } else {
-        this.previewImage = this.add.image(this.previewCenterX, 205, key);
+        this.previewImage = this.add.image(this.previewCenterX, 300, key);
       }
 
-      fitImage(this.previewImage, 352, 192);
+      fitImage(this.previewImage, 452, 262);
     } else {
       this.previewImage?.setVisible(false);
       this.previewPlaceholder
@@ -368,7 +363,6 @@ export class StageSelectScene extends Phaser.Scene {
     });
   }
 
-  /** Cualquier control conectado puede elegir el escenario. */
   update() {
     const pads = navigator.getGamepads?.() ?? [];
     const pad = Array.from(pads).find((p) => p && p.connected);
@@ -433,7 +427,6 @@ export class StageSelectScene extends Phaser.Scene {
         Math.floor(this.selected / this.columns) <
         Math.floor((count - 1) / this.columns)
       ) {
-        // Fila siguiente más corta: ir a la última casilla.
         next = count - 1;
       }
     }
@@ -452,7 +445,6 @@ export class StageSelectScene extends Phaser.Scene {
 
     let stage = item.stage;
 
-    // "Aleatorio": uno cualquiera de los disponibles.
     if (!stage) {
       const available = this.stages.filter(
         (candidate) => candidate.availability === 'available'

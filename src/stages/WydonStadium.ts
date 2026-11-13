@@ -15,9 +15,9 @@ export const wydonStadium: StageDefinition = {
     },
     music: {
       path: '/assets/audio/Music/stages/wydon_stadium_back.mp3',
-      volume: 0.2,
+      volume: 0.1,
       loop: true
     },
   },
-  groundY: 520
+  groundY: 700
 };

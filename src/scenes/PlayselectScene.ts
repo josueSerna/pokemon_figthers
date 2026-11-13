@@ -1,6 +1,8 @@
+
 import Phaser from 'phaser';
 import {
   SCREEN_WIDTH,
+  SCREEN_HEIGHT,
   drawSpaceBackground,
   fitImage
 } from '../ui/Menuui';
@@ -13,11 +15,11 @@ interface MenuOption {
   /** Escena a la que va al elegir la opción (solo si está habilitada). */
   nextScene?: string;
   /**
-   * Ruta de la imagen de la tarjeta, por ejemplo '/assets/menu/1v1.png'.
-   * Si la dejas vacía se muestra un recuadro "IMAGEN" como marcador.
+   * Ruta de la imagen de la tarjeta.
+   * Si está vacía se muestra un marcador.
    */
   image?: string;
-  /** Icono que se ve en el marcador mientras no haya imagen. */
+  /** Icono del marcador mientras no haya imagen. */
   icon: string;
 }
 
@@ -60,14 +62,15 @@ const MENU_OPTIONS: MenuOption[] = [
   }
 ];
 
-// Posición de cada tarjeta (cuadrícula 2 x 2 con bordes inclinados).
+// Inclinación de los bordes de las tarjetas.
 const SKEW = 24;
 
+// Distribución de las tarjetas en 1280 x 720.
 const PANEL_RECTS = [
-  { x: 30, y: 52, w: 470, h: 215 },
-  { x: 512, y: 52, w: 418, h: 215 },
-  { x: 30, y: 279, w: 470, h: 215 },
-  { x: 512, y: 279, w: 418, h: 215 }
+  { x: 40, y: 100, w: 570, h: 250 },
+  { x: 670, y: 100, w: 570, h: 250 },
+  { x: 40, y: 380, w: 570, h: 250 },
+  { x: 670, y: 380, w: 570, h: 250 }
 ];
 
 type Point = Phaser.Math.Vector2;
@@ -99,15 +102,15 @@ export class PlaySelectScene extends Phaser.Scene {
 
     drawSpaceBackground(this);
 
-    this.add.text(30, 24, '¿QUÉ QUIERES JUGAR?', {
+    this.add.text(40, 35, '¿QUÉ QUIERES JUGAR?', {
       color: '#75c9c8',
-      fontSize: '22px',
+      fontSize: '26px',
       fontStyle: 'bold'
     }).setOrigin(0, 0.5);
 
-    this.toast = this.add.text(SCREEN_WIDTH - 30, 24, '', {
+    this.toast = this.add.text(SCREEN_WIDTH - 40, 35, '', {
       color: '#f29b9b',
-      fontSize: '15px',
+      fontSize: '17px',
       fontStyle: 'bold'
     }).setOrigin(1, 0.5).setAlpha(0);
 
@@ -119,11 +122,11 @@ export class PlaySelectScene extends Phaser.Scene {
 
     this.add.text(
       SCREEN_WIDTH / 2,
-      518,
+      SCREEN_HEIGHT - 30,
       '← → ↑ ↓  MOVER      ENTER  ELEGIR',
       {
         color: '#75c9c8',
-        fontSize: '15px',
+        fontSize: '19px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);
@@ -170,7 +173,7 @@ export class PlaySelectScene extends Phaser.Scene {
 
     const g = this.add.graphics();
 
-    // Fondo de la tarjeta (gris si está deshabilitada).
+    // Fondo de la tarjeta.
     g.fillStyle(option.enabled ? option.color : 0x4a5568, 1);
     g.fillPoints(points, true);
 
@@ -187,13 +190,18 @@ export class PlaySelectScene extends Phaser.Scene {
       g.fillPoints(points, true);
     }
 
-    // Marcador de imagen (o la imagen real si ya la configuraste).
-    this.createImageSlot(option, x + w * 0.74 + SKEW / 2, y + h * 0.43, index);
+    // Imagen o marcador.
+    this.createImageSlot(
+      option,
+      x + w * 0.74 + SKEW / 2,
+      y + h * 0.43,
+      index
+    );
 
     // Título.
-    this.add.text(x + 34, y + h - 62, option.title, {
+    this.add.text(x + 38, y + h - 72, option.title, {
       color: '#ffffff',
-      fontSize: index === 0 ? '34px' : '28px',
+      fontSize: index === 0 ? '36px' : '32px',
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 5
@@ -201,12 +209,12 @@ export class PlaySelectScene extends Phaser.Scene {
 
     // Estado.
     this.add.text(
-      x + 34,
-      y + h - 26,
+      x + 38,
+      y + h - 32,
       option.enabled ? 'Estado: Habilitado' : 'Estado: Deshabilitado',
       {
         color: option.enabled ? '#b9f5b9' : '#f5b9b9',
-        fontSize: '14px',
+        fontSize: '16px',
         fontStyle: 'bold',
         stroke: '#000000',
         strokeThickness: 3
@@ -214,9 +222,9 @@ export class PlaySelectScene extends Phaser.Scene {
     ).setOrigin(0, 0.5);
 
     if (!option.enabled) {
-      this.add.text(x + SKEW + 18, y + 20, '🔒 PRÓXIMAMENTE', {
+      this.add.text(x + SKEW + 22, y + 24, '🔒 PRÓXIMAMENTE', {
         color: '#ffffff',
-        fontSize: '13px',
+        fontSize: '15px',
         fontStyle: 'bold',
         stroke: '#000000',
         strokeThickness: 3
@@ -231,7 +239,13 @@ export class PlaySelectScene extends Phaser.Scene {
       0, h
     ]);
 
-    const zone = this.add.zone(x + (w + SKEW) / 2, y + h / 2, w + SKEW, h);
+    const zone = this.add.zone(
+      x + (w + SKEW) / 2,
+      y + h / 2,
+      w + SKEW,
+      h
+    );
+
     zone.setInteractive(hitArea, Phaser.Geom.Polygon.Contains);
     zone.input!.cursor = 'pointer';
 
@@ -253,14 +267,18 @@ export class PlaySelectScene extends Phaser.Scene {
     cy: number,
     index: number
   ) {
-    const size = Math.min(PANEL_RECTS[index].h * 0.62, 140);
+    const size = Math.min(PANEL_RECTS[index].h * 0.62, 155);
     const key = `menu-${option.id}`;
 
     if (option.image && this.textures.exists(key)) {
       const image = this.add.image(cx, cy, key);
+
       fitImage(image, size, size);
 
-      if (!option.enabled) image.setTint(0x888888);
+      if (!option.enabled) {
+        image.setTint(0x888888);
+      }
+
       return;
     }
 
@@ -270,12 +288,12 @@ export class PlaySelectScene extends Phaser.Scene {
       .setStrokeStyle(2, 0xffffff, 0.5);
 
     this.add.text(cx, cy - 10, option.icon, {
-      fontSize: '44px'
+      fontSize: '52px'
     }).setOrigin(0.5);
 
     this.add.text(cx, cy + size / 2 - 18, 'IMAGEN', {
       color: '#ffffff',
-      fontSize: '12px',
+      fontSize: '14px',
       fontStyle: 'bold'
     }).setOrigin(0.5).setAlpha(0.7);
   }
@@ -314,10 +332,16 @@ export class PlaySelectScene extends Phaser.Scene {
     let column = this.selected % 2;
     let row = Math.floor(this.selected / 2);
 
-    if (dx !== 0) column = column === 0 ? 1 : 0;
-    if (dy !== 0) row = row === 0 ? 1 : 0;
+    if (dx !== 0) {
+      column = column === 0 ? 1 : 0;
+    }
+
+    if (dy !== 0) {
+      row = row === 0 ? 1 : 0;
+    }
 
     this.selected = row * 2 + column;
+
     this.drawSelector();
   }
 

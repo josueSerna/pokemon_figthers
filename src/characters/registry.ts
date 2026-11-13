@@ -1,8 +1,9 @@
 import { charizard } from './charizard';
 import { lucario } from './lucario';
+import { gengar } from './gengar';
 import type { CharacterDefinition } from './types';
 
-const characters: readonly CharacterDefinition[] = [lucario, charizard];
+const characters: readonly CharacterDefinition[] = [lucario, charizard, gengar];
 
 export function getCharacters(): readonly CharacterDefinition[] {
   return characters;

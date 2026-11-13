@@ -1,26 +1,31 @@
+
 import Phaser from 'phaser';
 import type { StageDefinition } from './types';
 
-const SCREEN_WIDTH = 960;
-const SCREEN_HEIGHT = 540;
+const SCREEN_WIDTH = 1280;
+const SCREEN_HEIGHT = 720;
 
 // Resolución por defecto de los videos de los escenarios.
 const DEFAULT_VIDEO_WIDTH = 1280;
 const DEFAULT_VIDEO_HEIGHT = 720;
 
-const videoKey = (stage: StageDefinition) => `stage-video-${stage.id}`;
-const musicKey = (stage: StageDefinition) => `stage-music-${stage.id}`;
+const videoKey = (stage: StageDefinition) =>
+  `stage-video-${stage.id}`;
+
+const musicKey = (stage: StageDefinition) =>
+  `stage-music-${stage.id}`;
+
 const effectKey = (stage: StageDefinition, name: string) =>
   `stage-sfx-${stage.id}-${name}`;
 
 /**
- * Se encarga de todo lo que "es" el escenario durante la partida:
+ * Se encarga de todo lo que es el escenario durante la partida:
  * video de fondo, música y efectos de sonido.
  *
  * Uso en una escena:
- *   preload(): StageController.preload(this, stage);
- *   create():  this.stageController = new StageController(this, stage); this.stageController.create();
- *   cierre:    this.stageController.destroy();
+ * preload(): StageController.preload(this, stage);
+ * create(): this.stageController = new StageController(this, stage); this.stageController.create();
+ * cierre: this.stageController.destroy();
  */
 export class StageController {
   private readonly scene: Phaser.Scene;
@@ -62,14 +67,16 @@ export class StageController {
     this.createAmbientEffects();
   }
 
-  /** Reproduce un efecto una vez (se puede llamar muchas veces seguidas). */
+  /** Reproduce un efecto una vez. */
   playEffect(name: string) {
     const effect = this.stage.assets.soundEffects?.[name];
     const key = effectKey(this.stage, name);
 
     if (!effect || !this.scene.cache.audio.exists(key)) return;
 
-    this.scene.sound.play(key, { volume: effect.volume ?? 1 });
+    this.scene.sound.play(key, {
+      volume: effect.volume ?? 1
+    });
   }
 
   destroy() {
@@ -82,6 +89,7 @@ export class StageController {
       sound.stop();
       sound.destroy();
     });
+
     this.loops = [];
 
     this.video?.stop();
@@ -112,35 +120,49 @@ export class StageController {
       background.setVolume(video.volume);
     }
 
-    // Primero el tamaño interno del objeto (la resolución del video) y
-    // después el tamaño en pantalla: si no, Phaser calcula mal la escala.
+    // Primero el tamaño interno del objeto y después el tamaño en pantalla.
     const fitBackground = (width: number, height: number) => {
       background.setSize(width, height);
 
       // Ajusta el video al tamaño lógico del juego manteniendo la proporción.
-      const scale = Math.min(SCREEN_WIDTH / width, SCREEN_HEIGHT / height);
+      const scale = Math.min(
+        SCREEN_WIDTH / width,
+        SCREEN_HEIGHT / height
+      );
 
-      background.setDisplaySize(width * scale, height * scale);
+      background.setDisplaySize(
+        width * scale,
+        height * scale
+      );
     };
 
-    // Con la resolución conocida (1280 x 720 por defecto) ya queda bien
-    // incluso antes de que el navegador lea los metadatos.
+    // Tamaño inicial mientras se cargan los metadatos.
     fitBackground(
       video.width ?? DEFAULT_VIDEO_WIDTH,
       video.height ?? DEFAULT_VIDEO_HEIGHT
     );
 
-    // Cuando el video conoce su resolución real, se reajusta con ese valor.
+    // Cuando el video conoce su resolución real, se reajusta.
     const applyRealSize = () => {
       const element = background.video;
 
       if (!element?.videoWidth || !element?.videoHeight) return;
 
-      fitBackground(element.videoWidth, element.videoHeight);
+      fitBackground(
+        element.videoWidth,
+        element.videoHeight
+      );
     };
 
-    background.once(Phaser.GameObjects.Events.VIDEO_METADATA, applyRealSize);
-    background.on(Phaser.GameObjects.Events.VIDEO_PLAY, applyRealSize);
+    background.once(
+      Phaser.GameObjects.Events.VIDEO_METADATA,
+      applyRealSize
+    );
+
+    background.on(
+      Phaser.GameObjects.Events.VIDEO_PLAY,
+      applyRealSize
+    );
 
     background.play(true);
 
@@ -151,7 +173,7 @@ export class StageController {
     const { music } = this.stage.assets;
     const key = musicKey(this.stage);
 
-    // Si el archivo no existe o no se pudo decodificar, se omite sin romper nada.
+    // Si el archivo no existe o no se pudo decodificar, se omite.
     if (!music || !this.scene.cache.audio.exists(key)) return;
 
     this.music = this.scene.sound.add(key, {
@@ -167,7 +189,12 @@ export class StageController {
       ([name, effect]) => {
         const key = effectKey(this.stage, name);
 
-        if (!effect.autoplay || !this.scene.cache.audio.exists(key)) return;
+        if (
+          !effect.autoplay ||
+          !this.scene.cache.audio.exists(key)
+        ) {
+          return;
+        }
 
         const sound = this.scene.sound.add(key, {
           volume: effect.volume ?? 1,

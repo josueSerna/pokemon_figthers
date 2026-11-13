@@ -312,10 +312,10 @@ export class CharacterSelectScene extends Phaser.Scene {
       const sx = x + 6 + s * 26;
       stripes.fillPoints(
         [
-          { x: sx + 14, y: top + 3 },
-          { x: sx + 26, y: top + 3 },
-          { x: sx + 4, y: top + height - 3 },
-          { x: sx - 8, y: top + height - 3 }
+        new Phaser.Math.Vector2(sx + 14, top + 3),
+        new Phaser.Math.Vector2(sx + 26, top + 3),
+        new Phaser.Math.Vector2(sx + 4, top + height - 3),
+        new Phaser.Math.Vector2(sx - 8, top + height - 3),
         ],
         true
       );

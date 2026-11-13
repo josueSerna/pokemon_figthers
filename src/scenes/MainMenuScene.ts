@@ -1,5 +1,6 @@
 
 import Phaser from 'phaser';
+import { SCREEN_WIDTH, SCREEN_HEIGHT } from '../ui/Menuui';
 
 export class MainMenuScene extends Phaser.Scene {
   private background?: Phaser.GameObjects.Video;
@@ -18,8 +19,8 @@ export class MainMenuScene extends Phaser.Scene {
 
     // Creamos el vídeo de fondo.
     this.background = this.add.video(
-      480,
-      270,
+      SCREEN_WIDTH / 2,
+      SCREEN_HEIGHT / 2,
       'main-menu-video'
     );
 
@@ -49,7 +50,10 @@ export class MainMenuScene extends Phaser.Scene {
         );
 
         // Ajustamos el vídeo al tamaño lógico del juego.
-        this.background.setDisplaySize(960, 540);
+        this.background.setDisplaySize(
+          SCREEN_WIDTH,
+          SCREEN_HEIGHT
+        );
       }
     );
 
@@ -58,8 +62,8 @@ export class MainMenuScene extends Phaser.Scene {
 
     // Logo.
     this.logo = this.add.image(
-      480,
-      72,
+      SCREEN_WIDTH / 2,
+      115,
       'game-logo'
     );
 
@@ -74,7 +78,7 @@ export class MainMenuScene extends Phaser.Scene {
     this.createButton('CRÉDITOS', 2);
 
     // Ajustamos el logo y los botones.
-    this.resizeElements(960, 540);
+    this.resizeElements(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // Recuperamos la música.
     this.music = this.sound.get('main-menu-music')
@@ -114,10 +118,10 @@ export class MainMenuScene extends Phaser.Scene {
 
     // Logo.
     this.logo
-      ?.setPosition(centerX, height * 0.16)
+      ?.setPosition(centerX, height * 0.19)
       .setDisplaySize(
-        280 * scale,
-        100 * scale
+        350 * scale,
+        125 * scale
       );
 
     // Posiciones de los botones.
@@ -130,13 +134,13 @@ export class MainMenuScene extends Phaser.Scene {
     this.buttons.forEach((button, index) => {
       button
         .setPosition(centerX, buttonYPositions[index])
-        .setSize(220 * scale, 42 * scale);
+        .setSize(280 * scale, 52 * scale);
     });
 
     this.buttonTexts.forEach((text, index) => {
       text
         .setPosition(centerX, buttonYPositions[index])
-        .setFontSize(`${20 * scale}px`);
+        .setFontSize(`${24 * scale}px`);
     });
   }
 
@@ -178,8 +182,8 @@ export class MainMenuScene extends Phaser.Scene {
     const button = this.add.rectangle(
       0,
       0,
-      220,
-      42,
+      280,
+      52,
       0x101827,
       0.85
     )
@@ -194,7 +198,7 @@ export class MainMenuScene extends Phaser.Scene {
       label,
       {
         color: '#ffffff',
-        fontSize: '20px',
+        fontSize: '24px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);

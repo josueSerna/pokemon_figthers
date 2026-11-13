@@ -1,7 +1,8 @@
+
 import Phaser from 'phaser';
 
-export const SCREEN_WIDTH = 960;
-export const SCREEN_HEIGHT = 540;
+export const SCREEN_WIDTH = 1280;
+export const SCREEN_HEIGHT = 720;
 
 export const PLAYER_COLORS = [
   { label: 'P1', color: 0xd62839, hex: '#ff6b73' },
@@ -62,19 +63,19 @@ export function drawHeader(
   g.fillStyle(0x75c9c8, 1);
   g.fillRect(0, 64, SCREEN_WIDTH, 3);
 
-  // Banner amarillo inclinado.
+  // Banner amarillo inclinado, centrado en la pantalla.
   g.fillStyle(0xf2c718, 1);
   g.fillPoints(
     [
-      { x: 160, y: 10 },
-      { x: 560, y: 10 },
-      { x: 538, y: 54 },
-      { x: 138, y: 54 }
+      new Phaser.Math.Vector2(480, 10),
+      new Phaser.Math.Vector2(880, 10),
+      new Phaser.Math.Vector2(858, 54),
+      new Phaser.Math.Vector2(458, 54)
     ],
     true
   );
 
-  scene.add.text(349, 32, title, {
+  scene.add.text(669, 32, title, {
     color: '#1a1a1a',
     fontSize: '25px',
     fontStyle: 'bold'

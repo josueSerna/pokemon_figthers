@@ -17,19 +17,14 @@ export const charizard: CharacterDefinition = {
   availability: 'available',
   stats: {
     maxHealth: 150,
-    movementSpeed: 150,
-    jumpForce: 320,
+    movementSpeed: 190,
+    jumpForce: 500,
     maxJumps: 2,
     fallSpeed: 900,
     defense: 10
   },
-  hitbox: {
-    width: 100,
-    height: 160,
-    offsetX: 90,
-    offsetY: 80,
-  },
-  visualScale: 1.25,
+  visualScale: 1.6,
+  defaultFlipX: false,
   assets: {
     portrait: '/assets/characters/charizard/Charizar_base.png',
     icon: '/assets/characters/charizard/Charizar_icon.png',
@@ -51,11 +46,12 @@ export const charizard: CharacterDefinition = {
   },
   animations: [
     { key: 'idle', assetKey: 'idle', startFrame: 0, endFrame: 8, frameRate: 6, repeat: -1 },
-    { key: 'walk', assetKey: 'walk', startFrame: 0, endFrame: 8, frameRate: 8, repeat: -1 },
-    { key: 'walk-back', assetKey: 'walk', startFrame: 8, endFrame: 0, frameRate: 8, repeat: -1 },
-    { key: 'jump', assetKey: 'jump', startFrame: 0, endFrame: 8, frameRate: 8, repeat: 0 },
-    { key: 'crouch', assetKey: 'crouch', startFrame: 0, endFrame: 8, frameRate: 8, repeat: 0 },
-    { key: 'airJump', assetKey: 'airJump', startFrame: 0, endFrame: 7, frameRate: 8, repeat: 0 },
+    { key: 'walk', assetKey: 'walk', startFrame: 0, endFrame: 23, frameRate: 16, repeat: -1 },
+    { key: 'walk-back', assetKey: 'walk', startFrame: 23, endFrame: 0, frameRate: 13, repeat: -1 },
+    { key: 'jump', assetKey: 'jump', startFrame: 0, endFrame: 8, frameRate: 16, repeat: 0 },
+    { key: 'crouch', assetKey: 'crouch', startFrame: 0, endFrame: 8, frameRate: 16, repeat: 0 },
+    { key: 'airJump', assetKey: 'airJump', startFrame: 0, endFrame: 9, frameRate: 6, repeat: 0 },
+    { key: 'airJump-fall', assetKey: 'airJump', startFrame: 7, endFrame: 8, frameRate: 8, repeat: -1 },
     { key: 'takeDamage', assetKey: 'takeDamage', startFrame: 1, endFrame: 8, frameRate: 16, repeat: 0 }
   ]
 };

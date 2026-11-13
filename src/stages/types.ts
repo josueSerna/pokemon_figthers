@@ -1,11 +1,14 @@
+
 export type StageAvailability = 'available' | 'locked';
 
 /** Un efecto de sonido propio del escenario (ambiente, multitud, truenos...). */
 export interface StageSoundEffect {
   path: string;
   volume?: number;
+
   /** Se repite sin parar (útil para ambientes). */
   loop?: boolean;
+
   /** Empieza solo al comenzar la partida. Pensado para ambientes con loop. */
   autoplay?: boolean;
 }
@@ -23,10 +26,12 @@ export interface StageDefinition {
     /** Video de fondo. */
     video: {
       path: string;
+
       /** Resolución real del video (1280 x 720 por defecto). */
       width?: number;
       height?: number;
-      /** Silenciado por defecto: el audio se maneja con `music`. */
+
+      /** Silenciado por defecto: el audio se maneja con music. */
       muted?: boolean;
       volume?: number;
     };
@@ -35,6 +40,7 @@ export interface StageDefinition {
     music?: {
       path: string;
       volume?: number;
+
       /** true por defecto. */
       loop?: boolean;
     };

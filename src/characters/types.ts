@@ -1,3 +1,4 @@
+
 import type { FighterAbility } from '../gameplay/abilities/types';
 
 export type CharacterAvailability = 'available' | 'locked';
@@ -12,13 +13,6 @@ export interface CharacterStats {
   defense: number;
 }
 
-export interface HitboxSize {
-  width: number;
-  height: number;
-  offsetX: number;
-  offsetY: number;
-}
-
 export interface SpriteSheetAsset {
   key: string;
   path: string;
@@ -29,12 +23,14 @@ export interface SpriteSheetAsset {
 export interface CharacterAssets {
   portrait?: string;
   icon?: string;
+
   portraitCrop?: {
     x: number;
     y: number;
     width: number;
     height: number;
   };
+
   spriteSheets: Record<string, SpriteSheetAsset>;
 }
 
@@ -52,10 +48,14 @@ export interface CharacterDefinition {
   name: string;
   description: string;
   availability: CharacterAvailability;
+
   stats: CharacterStats;
-  hitbox: HitboxSize;
+
   visualScale: number;
+  defaultFlipX?: boolean;
+
   assets: CharacterAssets;
   animations: readonly CharacterAnimation[];
+
   abilityFactories?: readonly FighterAbilityFactory[];
 }

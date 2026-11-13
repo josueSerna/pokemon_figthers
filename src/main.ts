@@ -11,23 +11,35 @@ import { StageSelectScene } from './stages/Stageselectscene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 960,
-  height: 540,
+  width: 1280,
+  height: 720,
   parent: 'game-container',
+
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
 
   physics: {
-    default: 'arcade',
-    arcade: {
-      gravity: { x: 0, y: 0 },
+    default: 'matter',
+    matter: {
+      gravity: {
+        x: 0,
+        y: 1
+      },
       debug: false
     }
   },
 
-  scene: [IntroScene, MainMenuScene,  PlaySelectScene, ModeSelectScene,CharacterSelectScene, StageSelectScene, GameScene]
+  scene: [
+    IntroScene,
+    MainMenuScene,
+    PlaySelectScene,
+    ModeSelectScene,
+    CharacterSelectScene,
+    StageSelectScene,
+    GameScene
+  ]
 };
 
 new Phaser.Game(config);

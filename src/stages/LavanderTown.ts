@@ -14,10 +14,10 @@ export const lavanderTown: StageDefinition = {
       muted: true
     },
     music: {
-      path: '',
-      volume: 0.5,
+      path: '/assets/audio/Music/stages/lavander_town_back.mp3',
+      volume: 0.1,
       loop: true
     },
   },
-  groundY: 520
+  groundY: 700
 };

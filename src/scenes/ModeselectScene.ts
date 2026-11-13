@@ -1,6 +1,8 @@
+
 import Phaser from 'phaser';
 import {
   SCREEN_WIDTH,
+  SCREEN_HEIGHT,
   drawHeader,
   drawSpaceBackground,
   drawToken
@@ -28,16 +30,29 @@ export class ModeSelectScene extends Phaser.Scene {
     drawSpaceBackground(this);
     drawHeader(this, 'COMBATE 1 VS 1');
 
-    this.createCard(1, 300, '1 JUGADOR', 'Un solo luchador', 'WASD  /  FLECHAS');
-    this.createCard(2, 660, '2 JUGADORES', 'Dos luchadores, mismo teclado', 'P1: WASD   ·   P2: FLECHAS');
+    this.createCard(
+      1,
+      390,
+      '1 JUGADOR',
+      'Un solo luchador',
+      'WASD  /  FLECHAS'
+    );
+
+    this.createCard(
+      2,
+      890,
+      '2 JUGADORES',
+      'Dos luchadores, mismo teclado',
+      'P1: WASD   ·   P2: FLECHAS'
+    );
 
     this.add.text(
       SCREEN_WIDTH / 2,
-      495,
+      SCREEN_HEIGHT - 45,
       '← →  ELEGIR      ENTER  CONFIRMAR',
       {
         color: '#75c9c8',
-        fontSize: '16px',
+        fontSize: '20px',
         fontStyle: 'bold'
       }
     ).setOrigin(0.5);
@@ -66,40 +81,42 @@ export class ModeSelectScene extends Phaser.Scene {
     subtitle: string,
     controls: string
   ) {
-    const y = 285;
+    const y = 355;
 
-    const box = this.add.rectangle(x, y, 320, 330, 0x18263b);
+    const box = this.add.rectangle(x, y, 390, 390, 0x18263b);
     box.setStrokeStyle(3, 0x526581);
     box.setInteractive({ useHandCursor: true });
 
     // Fichas de jugador.
     if (count === 1) {
-      drawToken(this, x, y - 85, 42, 0);
+      drawToken(this, x, y - 105, 50, 0);
     } else {
-      drawToken(this, x - 48, y - 85, 38, 0);
-      drawToken(this, x + 48, y - 85, 38, 1);
+      drawToken(this, x - 58, y - 105, 44, 0);
+      drawToken(this, x + 58, y - 105, 44, 1);
     }
 
-    this.add.text(x, y + 10, title, {
+    this.add.text(x, y + 15, title, {
       color: '#ffffff',
-      fontSize: '28px',
+      fontSize: '32px',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.add.text(x, y + 50, subtitle, {
+    this.add.text(x, y + 65, subtitle, {
       color: '#b9c6d8',
-      fontSize: '14px',
+      fontSize: '17px',
       align: 'center',
-      wordWrap: { width: 280 }
+      wordWrap: { width: 340 }
     }).setOrigin(0.5);
 
-    this.add.text(x, y + 120, controls, {
+    this.add.text(x, y + 140, controls, {
       color: '#75c9c8',
-      fontSize: '13px',
-      fontStyle: 'bold'
+      fontSize: '15px',
+      fontStyle: 'bold',
+      align: 'center'
     }).setOrigin(0.5);
 
     box.on('pointerover', () => this.select(count));
+
     box.on('pointerdown', () => {
       this.select(count);
       this.confirm();
