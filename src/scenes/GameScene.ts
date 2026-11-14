@@ -15,6 +15,10 @@ import {
 } from '../gameplay/CharacterController';
 
 import {
+  charizardNeutralAttacks
+} from '../gameplay/attacks/charizard/charizardNeutralAttacks';
+
+import {
   InputManager
 } from '../gameplay/input/InputManager';
 
@@ -380,6 +384,24 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
+    // Jugador uno: Charizard.
+    if (
+      this.playerOneCharacter.id === 'charizard'
+    ) {
+      this.playerOneNeutral = new NeutralAttackController(
+        this,
+        this.playerOne.visual,
+        this.playerTwo.fighter,
+        (damage: number) => {
+          this.playerTwo?.takeDamage(damage);
+        },
+        charizardNeutralAttacks,
+        (attacking: boolean) => {
+          this.playerOne?.setNeutralAttacking(attacking);
+        }
+      );
+    }
+
     // Jugador dos: Gengar.
     if (
       this.playerTwoCharacter.id === 'gengar'
@@ -392,6 +414,24 @@ export class GameScene extends Phaser.Scene {
           this.playerOne?.takeDamage(damage);
         },
         gengarNeutralAttacks,
+        (attacking: boolean) => {
+          this.playerTwo?.setNeutralAttacking(attacking);
+        }
+      );
+    }
+
+    // Jugador dos: Charizard.
+    if (
+      this.playerTwoCharacter.id === 'charizard'
+    ) {
+      this.playerTwoNeutral = new NeutralAttackController(
+        this,
+        this.playerTwo.visual,
+        this.playerOne.fighter,
+        (damage: number) => {
+          this.playerOne?.takeDamage(damage);
+        },
+        charizardNeutralAttacks,
         (attacking: boolean) => {
           this.playerTwo?.setNeutralAttacking(attacking);
         }
@@ -455,113 +495,99 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const fighterOne = this.playerOne.fighter;
-    const fighterTwo = this.playerTwo.fighter;
+    const boundsOne = this.playerOne.getPushboxBounds();
+    const boundsTwo = this.playerTwo.getPushboxBounds();
 
-    const bodyOne =
-      fighterOne.body as MatterJS.BodyType | null;
-
-    const bodyTwo =
-      fighterTwo.body as MatterJS.BodyType | null;
-
-    if (!bodyOne || !bodyTwo) {
-      return;
-    }
-
-    const boundsOne = bodyOne.bounds;
-    const boundsTwo = bodyTwo.bounds;
-
+    // Comprueba si las pushboxes se encuentran a la misma altura.
     const verticalOverlap =
-      boundsOne.min.y < boundsTwo.max.y &&
-      boundsOne.max.y > boundsTwo.min.y;
+      boundsOne.top < boundsTwo.bottom &&
+      boundsOne.bottom > boundsTwo.top;
 
+    // Si no están a la misma altura, pueden pasar por encima.
     if (!verticalOverlap) {
       return;
     }
 
-    const oneIsLeft =
-      bodyOne.position.x <= bodyTwo.position.x;
+    // Comprueba cuánto se están superponiendo horizontalmente.
+    const overlapX =
+      Math.min(boundsOne.right, boundsTwo.right) -
+      Math.max(boundsOne.left, boundsTwo.left);
 
-    const leftFighter = oneIsLeft
-      ? fighterOne
-      : fighterTwo;
-
-    const rightFighter = oneIsLeft
-      ? fighterTwo
-      : fighterOne;
-
-    const leftBody = oneIsLeft
-      ? bodyOne
-      : bodyTwo;
-
-    const rightBody = oneIsLeft
-      ? bodyTwo
-      : bodyOne;
-
-    const leftBounds = leftBody.bounds;
-    const rightBounds = rightBody.bounds;
-
-    const gap =
-      rightBounds.min.x - leftBounds.max.x;
-
-    const leftVelocity =
-      leftFighter.getVelocity().x;
-
-    const rightVelocity =
-      rightFighter.getVelocity().x;
-
-    const leftApproach = Math.max(
-      0,
-      leftVelocity
-    );
-
-    const rightApproach = Math.max(
-      0,
-      -rightVelocity
-    );
-
-    const closingSpeed =
-      leftApproach + rightApproach;
-
-    if (closingSpeed <= 0) {
+    if (overlapX <= 0) {
       return;
     }
 
-    if (gap <= 0) {
-      if (leftVelocity > 0) {
-        leftFighter.setVelocityX(0);
-      }
+    // Identifica qué personaje está a cada lado.
+    const oneIsLeft = boundsOne.centerX <= boundsTwo.centerX;
 
-      if (rightVelocity < 0) {
-        rightFighter.setVelocityX(0);
-      }
+    const leftPlayer = oneIsLeft
+      ? this.playerOne
+      : this.playerTwo;
 
-      return;
-    }
+    const rightPlayer = oneIsLeft
+      ? this.playerTwo
+      : this.playerOne;
 
-    if (gap <= closingSpeed + 0.5) {
-      const availableMovement = Math.max(
-        0,
-        gap - 0.5
+    const leftBounds = oneIsLeft
+      ? boundsOne
+      : boundsTwo;
+
+    const rightBounds = oneIsLeft
+      ? boundsTwo
+      : boundsOne;
+
+    // Espacio disponible antes de alcanzar los límites.
+    const leftAvailable = Math.max(
+      0,
+      leftBounds.centerX - leftBounds.width / 2
+    );
+
+    const rightAvailable = Math.max(
+      0,
+      this.screenWidth -
+        rightBounds.width / 2 -
+        rightBounds.centerX
+    );
+
+    // Se intenta repartir el empuje entre ambos personajes.
+    const totalOverlap = overlapX + 0.5;
+
+    let leftMovement = Math.min(
+      totalOverlap / 2,
+      leftAvailable
+    );
+
+    let rightMovement = Math.min(
+      totalOverlap / 2,
+      rightAvailable
+    );
+
+    // Si uno está contra la pared, el otro absorbe el empuje restante.
+    let remaining =
+      totalOverlap - leftMovement - rightMovement;
+
+    if (remaining > 0) {
+      const extraLeft = Math.min(
+        remaining,
+        leftAvailable - leftMovement
       );
 
-      const movementRatio = Math.min(
-        1,
-        availableMovement / closingSpeed
+      leftMovement += extraLeft;
+      remaining -= extraLeft;
+    }
+
+    if (remaining > 0) {
+      const extraRight = Math.min(
+        remaining,
+        rightAvailable - rightMovement
       );
 
-      if (leftVelocity > 0) {
-        leftFighter.setVelocityX(
-          leftVelocity * movementRatio
-        );
-      }
-
-      if (rightVelocity < 0) {
-        rightFighter.setVelocityX(
-          rightVelocity * movementRatio
-        );
-      }
+      rightMovement += extraRight;
     }
+
+    // Separa los personajes utilizando sus pushboxes.
+    leftPlayer.moveByPushboxX(-leftMovement);
+    rightPlayer.moveByPushboxX(rightMovement);
   }
 
   // --------------------------------------------------

@@ -43,11 +43,6 @@ export interface NeutralAttackDefinition {
   impact?: NeutralImpactDefinition;
 }
 
-interface MatterBounds {
-  min: { x: number; y: number };
-  max: { x: number; y: number };
-}
-
 export class NeutralAttackController {
   private readonly scene: Phaser.Scene;
   private readonly attacker: Phaser.GameObjects.Sprite;
@@ -397,38 +392,51 @@ export class NeutralAttackController {
     );
   }
 
+  // --------------------------------------------------
+  // COLISIÓN CONTRA LAS HURTBOXES
+  // --------------------------------------------------
+
   private checkHitbox(
     hitbox: Phaser.Geom.Rectangle,
     attack: NeutralAttackDefinition
   ): void {
-    if (!this.opponent.body) return;
+    const body = this.opponent.body as MatterJS.BodyType | null;
 
-    const body = this.opponent.body as unknown as {
-      bounds: MatterBounds;
-    };
+    if (!body) return;
 
-    const bounds = body.bounds;
+    // Excluimos la parte principal del cuerpo compuesto.
+    // Las partes restantes son cabeza, torso y piernas.
+    const hurtboxParts =
+      body.parts.length > 1
+        ? body.parts.slice(1)
+        : [body];
 
-    const opponentBounds = new Phaser.Geom.Rectangle(
-      bounds.min.x,
-      bounds.min.y,
-      bounds.max.x - bounds.min.x,
-      bounds.max.y - bounds.min.y
-    );
+    for (const part of hurtboxParts) {
+      const bounds = part.bounds;
 
-    if (
-      !Phaser.Geom.Intersects.RectangleToRectangle(
-        hitbox,
-        opponentBounds
-      )
-    ) {
+      const hurtboxBounds = new Phaser.Geom.Rectangle(
+        bounds.min.x,
+        bounds.min.y,
+        bounds.max.x - bounds.min.x,
+        bounds.max.y - bounds.min.y
+      );
+
+      if (
+        !Phaser.Geom.Intersects.RectangleToRectangle(
+          hitbox,
+          hurtboxBounds
+        )
+      ) {
+        continue;
+      }
+
+      this.hasHit = true;
+      this.takeDamage(attack.damage);
+
+      this.showImpact(attack, hurtboxBounds);
+
       return;
     }
-
-    this.hasHit = true;
-    this.takeDamage(attack.damage);
-
-    this.showImpact(attack, opponentBounds);
   }
 
   private showImpact(

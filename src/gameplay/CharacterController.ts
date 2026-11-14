@@ -9,6 +9,31 @@ import {
   type SpriteBounds
 } from './physics/SpriteBoundsAnalyzer';
 
+import { AnimationController } from './animations/AnimationController';
+import { JumpAnimationController } from './animations/movement/JumpAnimationController';
+
+const PUSHBOX_WIDTH = 72;
+const PUSHBOX_HEIGHT = 110;
+
+// Tamaño de las hurtboxes respecto a la silueta visible.
+const HURTBOX_WIDTH_FACTOR = 0.90;
+const HURTBOX_HEIGHT_FACTOR = 0.96;
+
+// Distribución vertical.
+const HURTBOX_HEAD_HEIGHT = 0.24;
+const HURTBOX_TORSO_HEIGHT = 0.40;
+
+// Anchura de cada región.
+const HURTBOX_HEAD_WIDTH = 0.72;
+const HURTBOX_TORSO_WIDTH = 1;
+const HURTBOX_LEGS_WIDTH = 0.82;
+
+// Colores del debug.
+const HEAD_COLOR = 0xf0b34a;
+const TORSO_COLOR = 0x439fe0;
+const LEGS_COLOR = 0x42b983;
+const PUSHBOX_COLOR = 0xd65bce;
+
 export class CharacterController {
   private readonly scene: Phaser.Scene;
   private readonly definition: CharacterDefinition;
@@ -23,15 +48,16 @@ export class CharacterController {
   private readonly animationPrefix: string;
   private readonly analyzer: SpriteBoundsAnalyzer;
 
+  private readonly animationController: AnimationController;
+  private readonly jumpAnimationController: JumpAnimationController;
+
   readonly fighter: Phaser.Physics.Matter.Sprite;
   readonly visual: Phaser.GameObjects.Sprite;
 
-  private readonly debugHitbox: Phaser.GameObjects.Graphics;
+  private readonly debugCollisions: Phaser.GameObjects.Graphics;
   private readonly abilities: readonly FighterAbility[];
 
   private readonly groundY: number;
-
-  private currentFrameKey?: string;
 
   private bodyOffsetX = 0;
   private bodyOffsetY = 0;
@@ -39,15 +65,13 @@ export class CharacterController {
   private lastBodyX = 0;
   private lastBodyY = 0;
 
+  private currentFrameKey?: string;
+
   private health: number;
   private jumpsRemaining: number;
 
   private takingDamage = false;
-  private landing = false;
-  private wasAirborne = false;
   private neutralAttacking = false;
-
-  private landingTimer?: Phaser.Time.TimerEvent;
 
   constructor(
     scene: Phaser.Scene,
@@ -85,56 +109,30 @@ export class CharacterController {
 
     this.fighter = this.createFighter(spawnX);
 
+    this.animationController = new AnimationController({
+      scene: this.scene,
+      visual: this.visual,
+      definition: this.definition,
+      animationPrefix: this.animationPrefix
+    });
+
+    this.jumpAnimationController = new JumpAnimationController(
+      this.animationController
+    );
+
     this.lastBodyX = this.fighter.x;
     this.lastBodyY = this.fighter.y;
 
-    this.debugHitbox = scene.add.graphics().setDepth(10);
+    this.debugCollisions = scene.add.graphics().setDepth(10);
 
-    scene.events.on('postupdate', this.updateDebugHitbox);
+    scene.events.on('postupdate', this.updateDebugCollisions);
 
     this.updateHitboxTransform();
   }
 
   setup() {
-    this.definition.animations.forEach((animation) => {
-      const asset =
-        this.definition.assets.spriteSheets[animation.assetKey];
-
-      const frames = this.scene.anims.generateFrameNumbers(asset.key, {
-        start: animation.startFrame,
-        end: animation.endFrame
-      });
-
-      if (frames.length === 0) {
-        console.error(
-          `No se pudieron generar frames para: ${animation.key}`
-        );
-        return;
-      }
-
-      const animationKey = this.animationKey(animation.key);
-
-      if (this.scene.anims.exists(animationKey)) {
-        return;
-      }
-
-      this.scene.anims.create({
-        key: animationKey,
-        frames,
-        frameRate: animation.frameRate,
-        repeat: animation.repeat
-      });
-    });
-
-    this.visual.on(
-      `animationcomplete-${this.animationKey('jump')}`,
-      this.handleJumpComplete
-    );
-
-    this.visual.on(
-      `animationcomplete-${this.animationKey('airJump')}`,
-      this.handleAirJumpComplete
-    );
+    this.animationController.setup();
+    this.jumpAnimationController.setup();
 
     this.abilities.forEach((ability) => {
       ability.setup({
@@ -145,8 +143,7 @@ export class CharacterController {
       });
     });
 
-    this.playAnimation('idle');
-    this.updateHitboxTransform();
+    this.animationController.play('idle');
   }
 
   update(delta = 16.6667) {
@@ -172,11 +169,6 @@ export class CharacterController {
 
     if (grounded) {
       this.jumpsRemaining = this.definition.stats.maxJumps;
-
-      if (this.wasAirborne) {
-        this.wasAirborne = false;
-        this.startLanding();
-      }
     } else {
       this.applyGravity(delta);
     }
@@ -191,10 +183,13 @@ export class CharacterController {
       this.applyMovement(left, right, crouching);
     }
 
+    // --------------------------------------------------
+    // SALTO
+    // --------------------------------------------------
+
     if (
       !this.neutralAttacking &&
       !abilityBlocksMovement &&
-      !this.landing &&
       this.input.justPressed('jump') &&
       this.jumpsRemaining > 0
     ) {
@@ -206,14 +201,31 @@ export class CharacterController {
       );
 
       this.jumpsRemaining--;
-      this.wasAirborne = true;
 
-      if (isSecondJump && this.hasAnimation('airJump')) {
-        this.playAnimation('airJump');
-      } else {
-        this.playAnimation('jump');
-      }
+      this.jumpAnimationController.startJump(isSecondJump);
     }
+
+    // --------------------------------------------------
+    // ACTUALIZACIÓN DE LA FÍSICA DEL SALTO
+    // --------------------------------------------------
+
+    const body = this.fighter.body as MatterJS.BodyType | null;
+
+    this.jumpAnimationController.setPhysics({
+      velocityY: this.fighter.getVelocity().y,
+
+      distanceToGround: body
+        ? Math.max(0, this.groundY - body.bounds.max.y)
+        : Infinity,
+
+      grounded: this.isGrounded()
+    });
+
+    this.jumpAnimationController.update(delta);
+
+    // --------------------------------------------------
+    // ORIENTACIÓN
+    // --------------------------------------------------
 
     const opponentX = this.opponent.fighter?.x ?? this.opponent.x;
     const opponentIsLeft = opponentX < this.fighter.x;
@@ -224,27 +236,22 @@ export class CharacterController {
     );
 
     this.updateAnimation(left, right, crouching);
+
+    // Actualiza las hurtboxes solamente cuando cambia el frame.
     this.updateHitboxTransform();
   }
 
   destroy() {
     this.abilities.forEach((ability) => ability.destroy());
 
-    this.landingTimer?.remove(false);
+    this.jumpAnimationController.destroy();
 
-    this.visual.off(
-      `animationcomplete-${this.animationKey('jump')}`,
-      this.handleJumpComplete
+    this.scene.events.off(
+      'postupdate',
+      this.updateDebugCollisions
     );
 
-    this.visual.off(
-      `animationcomplete-${this.animationKey('airJump')}`,
-      this.handleAirJumpComplete
-    );
-
-    this.scene.events.off('postupdate', this.updateDebugHitbox);
-
-    this.debugHitbox.destroy();
+    this.debugCollisions.destroy();
     this.visual.destroy();
     this.fighter.destroy();
     this.analyzer.destroy();
@@ -252,6 +259,42 @@ export class CharacterController {
 
   getHealth() {
     return this.health;
+  }
+
+  // --------------------------------------------------
+  // PUSHBOX
+  // --------------------------------------------------
+
+  getPushboxBounds() {
+    const centerX = this.fighter.x;
+    const centerY = this.fighter.y;
+
+    return {
+      left: centerX - PUSHBOX_WIDTH / 2,
+      right: centerX + PUSHBOX_WIDTH / 2,
+      top: centerY - PUSHBOX_HEIGHT / 2,
+      bottom: centerY + PUSHBOX_HEIGHT / 2,
+      centerX,
+      centerY,
+      width: PUSHBOX_WIDTH,
+      height: PUSHBOX_HEIGHT
+    };
+  }
+
+  moveByPushboxX(amount: number) {
+    if (amount === 0) return;
+
+    const body = this.fighter.body as MatterJS.BodyType | null;
+
+    if (!body) return;
+
+    this.scene.matter.body.setPosition(body, {
+      x: body.position.x + amount,
+      y: body.position.y
+    });
+
+    this.visual.x += amount;
+    this.lastBodyX += amount;
   }
 
   setNeutralAttacking(attacking: boolean) {
@@ -313,26 +356,18 @@ export class CharacterController {
     sprite.setVisible(false);
 
     const bounds = this.getCurrentSpriteBounds();
-    const frame = this.visual.frame;
-    const scale = this.definition.visualScale;
 
-    this.bodyOffsetX =
-      (bounds.centerX - frame.cutWidth / 2) * scale;
+    const hurtbox = this.createHurtboxBody(bounds);
 
-    this.bodyOffsetY =
-      (bounds.centerY - frame.cutHeight / 2) * scale;
+    this.bodyOffsetX = hurtbox.offsetX;
+    this.bodyOffsetY = hurtbox.offsetY;
 
-    const capsule = this.createCapsuleBody({
-      width: bounds.width * scale,
-      height: bounds.height * scale
-    });
-
-    this.scene.matter.body.setPosition(capsule, {
+    this.scene.matter.body.setPosition(hurtbox.body, {
       x: spawnX + this.bodyOffsetX,
       y: spawnY + this.bodyOffsetY
     });
 
-    sprite.setExistingBody(capsule);
+    sprite.setExistingBody(hurtbox.body);
 
     const fighterBody = sprite.body as MatterJS.BodyType;
 
@@ -381,6 +416,119 @@ export class CharacterController {
   }
 
   // --------------------------------------------------
+  // CREACIÓN DE LAS TRES HURTBOXES
+  // --------------------------------------------------
+
+  private createHurtboxBody(
+    bounds: SpriteBounds
+  ): {
+    body: MatterJS.BodyType;
+    offsetX: number;
+    offsetY: number;
+  } {
+    const frame = this.visual.frame;
+
+    const scaleX = Math.abs(this.visual.scaleX);
+    const scaleY = Math.abs(this.visual.scaleY);
+
+    const width = Math.max(
+      2,
+      bounds.width * scaleX * HURTBOX_WIDTH_FACTOR
+    );
+
+    const height = Math.max(
+      6,
+      bounds.height * scaleY * HURTBOX_HEIGHT_FACTOR
+    );
+
+    const headHeight = height * HURTBOX_HEAD_HEIGHT;
+    const torsoHeight = height * HURTBOX_TORSO_HEIGHT;
+    const legsHeight = height - headHeight - torsoHeight;
+
+    const headWidth = width * HURTBOX_HEAD_WIDTH;
+    const torsoWidth = width * HURTBOX_TORSO_WIDTH;
+    const legsWidth = width * HURTBOX_LEGS_WIDTH;
+
+    // Posiciones verticales medidas desde la parte superior.
+    const headCenterY = headHeight / 2;
+
+    const torsoCenterY =
+      headHeight + torsoHeight / 2;
+
+    const legsCenterY =
+      headHeight + torsoHeight + legsHeight / 2;
+
+    // Centro de masa ponderado por el área de cada caja.
+    const headArea = headWidth * headHeight;
+    const torsoArea = torsoWidth * torsoHeight;
+    const legsArea = legsWidth * legsHeight;
+
+    const totalArea = headArea + torsoArea + legsArea;
+
+    const centerOfMassY = (
+      headCenterY * headArea +
+      torsoCenterY * torsoArea +
+      legsCenterY * legsArea
+    ) / totalArea;
+
+    const bodies = this.scene.matter.bodies;
+
+    const parts: MatterJS.BodyType[] = [
+      // Cabeza.
+      bodies.rectangle(
+        0,
+        headCenterY - centerOfMassY,
+        headWidth,
+        headHeight
+      ),
+
+      // Torso.
+      bodies.rectangle(
+        0,
+        torsoCenterY - centerOfMassY,
+        torsoWidth,
+        torsoHeight
+      ),
+
+      // Piernas.
+      bodies.rectangle(
+        0,
+        legsCenterY - centerOfMassY,
+        legsWidth,
+        legsHeight
+      )
+    ];
+
+    const body = this.scene.matter.body.create({
+      parts,
+      friction: 0,
+      frictionStatic: 0,
+      frictionAir: 0,
+      restitution: 0,
+      label: 'fighter-hurtboxes'
+    });
+
+    const flipDirection = this.visual.flipX ? -1 : 1;
+
+    // Centro horizontal de la silueta visible.
+    const offsetX =
+      (bounds.centerX - frame.cutWidth / 2) *
+      scaleX *
+      flipDirection;
+
+    // Centro de masa vertical respecto al origen del sprite.
+    const offsetY =
+      (bounds.y - frame.cutHeight / 2) * scaleY +
+      centerOfMassY;
+
+    return {
+      body,
+      offsetX,
+      offsetY
+    };
+  }
+
+  // --------------------------------------------------
   // ANÁLISIS DEL SPRITE
   // --------------------------------------------------
 
@@ -407,6 +555,10 @@ export class CharacterController {
     };
   }
 
+  /**
+   * Reconstruye las hurtboxes cuando cambia el frame.
+   * Conserva la velocidad y la posición visual del luchador.
+   */
   private updateHitboxTransform() {
     const frame = this.visual.frame;
 
@@ -418,14 +570,7 @@ export class CharacterController {
 
     const bounds = this.getCurrentSpriteBounds();
 
-    const frameCenterX = frame.cutWidth / 2;
-    const frameCenterY = frame.cutHeight / 2;
-
-    const scaleX = this.visual.scaleX;
-    const scaleY = this.visual.scaleY;
-
-    const flipDirection = this.visual.flipX ? -1 : 1;
-
+    const scaleY = Math.abs(this.visual.scaleY);
     const velocity = this.fighter.getVelocity();
 
     const oldBody = this.fighter.body as MatterJS.BodyType | null;
@@ -435,35 +580,37 @@ export class CharacterController {
       oldBody.bounds.max.y >= this.groundY - 8 &&
       velocity.y >= -0.5;
 
+    // Cuando está en el suelo, alineamos la parte inferior
+    // de las hurtboxes con el suelo.
     if (wasGrounded) {
-      const visibleBottomOffset =
-        (bounds.y + bounds.height - frameCenterY) * scaleY;
+      const hurtboxHeight =
+        bounds.height *
+        scaleY *
+        HURTBOX_HEIGHT_FACTOR;
 
-      this.visual.y = this.groundY - visibleBottomOffset;
+      const hurtboxTopOffset =
+        (bounds.y - frame.cutHeight / 2) * scaleY;
+
+      const hurtboxBottomOffset =
+        hurtboxTopOffset + hurtboxHeight;
+
+      this.visual.y = this.groundY - hurtboxBottomOffset;
     }
 
-    this.bodyOffsetX =
-      (bounds.centerX - frameCenterX) *
-      scaleX *
-      flipDirection;
+    const hurtbox = this.createHurtboxBody(bounds);
 
-    this.bodyOffsetY =
-      (bounds.centerY - frameCenterY) * scaleY;
+    this.bodyOffsetX = hurtbox.offsetX;
+    this.bodyOffsetY = hurtbox.offsetY;
 
-    const capsule = this.createCapsuleBody({
-      width: bounds.width * scaleX,
-      height: bounds.height * scaleY
+    const targetX = this.visual.x + this.bodyOffsetX;
+    const targetY = this.visual.y + this.bodyOffsetY;
+
+    this.scene.matter.body.setPosition(hurtbox.body, {
+      x: targetX,
+      y: targetY
     });
 
-    const capsuleX = this.visual.x + this.bodyOffsetX;
-    const capsuleY = this.visual.y + this.bodyOffsetY;
-
-    this.scene.matter.body.setPosition(capsule, {
-      x: capsuleX,
-      y: capsuleY
-    });
-
-    this.fighter.setExistingBody(capsule);
+    this.fighter.setExistingBody(hurtbox.body);
 
     this.configureCollisionFilter();
 
@@ -489,67 +636,6 @@ export class CharacterController {
 
     this.lastBodyX = this.fighter.x;
     this.lastBodyY = this.fighter.y;
-  }
-
-  // --------------------------------------------------
-  // CÁPSULA DE MATTER
-  // --------------------------------------------------
-
-  private createCapsuleBody(size: {
-    width: number;
-    height: number;
-  }): MatterJS.BodyType {
-    const width = Math.max(2, size.width);
-    const height = Math.max(2, size.height);
-
-    const radius = Math.min(width, height) / 2;
-
-    const parts: MatterJS.BodyType[] = [];
-
-    const bodies = this.scene.matter.bodies;
-
-    if (height >= width) {
-      const middleHeight = height - radius * 2;
-
-      if (middleHeight > 0) {
-        parts.push(
-          bodies.rectangle(0, 0, width, middleHeight)
-        );
-      }
-
-      parts.push(
-        bodies.circle(0, -middleHeight / 2, radius)
-      );
-
-      parts.push(
-        bodies.circle(0, middleHeight / 2, radius)
-      );
-    } else {
-      const middleWidth = width - radius * 2;
-
-      if (middleWidth > 0) {
-        parts.push(
-          bodies.rectangle(0, 0, middleWidth, height)
-        );
-      }
-
-      parts.push(
-        bodies.circle(-middleWidth / 2, 0, radius)
-      );
-
-      parts.push(
-        bodies.circle(middleWidth / 2, 0, radius)
-      );
-    }
-
-    return this.scene.matter.body.create({
-      parts,
-      friction: 0,
-      frictionStatic: 0,
-      frictionAir: 0,
-      restitution: 0,
-      label: 'fighter-hitbox'
-    });
   }
 
   // --------------------------------------------------
@@ -600,57 +686,6 @@ export class CharacterController {
   }
 
   // --------------------------------------------------
-  // ANIMACIONES DE SALTO Y ATERRIZAJE
-  // --------------------------------------------------
-
-  private readonly handleJumpComplete = () => {
-    if (this.isGrounded()) return;
-
-    this.playAnimation('jump-fall');
-  };
-
-  private readonly handleAirJumpComplete = () => {
-    if (this.isGrounded()) return;
-
-    this.playAnimation('airJump-fall');
-  };
-
-  private startLanding() {
-    this.landing = true;
-
-    this.visual.anims.stop();
-
-    const fallAnimation =
-      this.definition.animations.find(
-        (animation) => animation.key === 'airJump-fall'
-      ) ??
-      this.definition.animations.find(
-        (animation) => animation.key === 'jump-fall'
-      );
-
-    if (fallAnimation) {
-      const asset =
-        this.definition.assets.spriteSheets[fallAnimation.assetKey];
-
-      const landingFrame = fallAnimation.endFrame + 1;
-
-      const texture = this.scene.textures.get(asset.key);
-
-      if (texture.has(String(landingFrame))) {
-        this.visual.setTexture(asset.key, landingFrame);
-        this.currentFrameKey = undefined;
-      }
-    }
-
-    this.landingTimer?.remove(false);
-
-    this.landingTimer = this.scene.time.delayedCall(120, () => {
-      this.landing = false;
-      this.landingTimer = undefined;
-    });
-  }
-
-  // --------------------------------------------------
   // ACTUALIZACIÓN DE ANIMACIONES
   // --------------------------------------------------
 
@@ -662,7 +697,7 @@ export class CharacterController {
     if (
       this.neutralAttacking ||
       this.takingDamage ||
-      this.landing
+      this.jumpAnimationController.isActive
     ) {
       return;
     }
@@ -676,29 +711,20 @@ export class CharacterController {
     }
 
     if (!this.isGrounded()) {
-      const currentAnimation = this.visual.anims.currentAnim?.key;
+      return;
+    }
 
-      const airborneAnimations = [
-        'jump',
-        'jump-fall',
-        'airJump',
-        'airJump-fall'
-      ];
-
-      const isPlayingAirborneAnimation = airborneAnimations.some(
-        (key) => currentAnimation === this.animationKey(key)
-      );
-
-      if (!isPlayingAirborneAnimation) {
-        this.playAnimation('jump');
+    if (crouching) {
+      if (this.hasAnimation('idleCrouch')) {
+        this.playAnimation('idleCrouch');
+      } else if (this.hasAnimation('crouch')) {
+        this.playAnimation('crouch');
       }
 
       return;
     }
 
-    if (crouching && this.hasAnimation('crouch')) {
-      this.playAnimation('crouch');
-    } else if (left || right) {
+    if (left || right) {
       const movingBackward = this.visual.flipX
         ? right
         : left;
@@ -714,64 +740,80 @@ export class CharacterController {
   }
 
   // --------------------------------------------------
+  // DEBUG DE COLISIONES
+  // --------------------------------------------------
+
+  private readonly updateDebugCollisions = () => {
+    const body = this.fighter.body as MatterJS.BodyType | null;
+
+    this.debugCollisions.clear();
+
+    if (!body) return;
+
+    const colors = [
+      HEAD_COLOR,
+      TORSO_COLOR,
+      LEGS_COLOR
+    ];
+
+    // Las partes 1, 2 y 3 son las tres hurtboxes.
+    const hurtboxParts = body.parts.slice(1);
+
+    hurtboxParts.forEach((part, index) => {
+      const color = colors[index];
+
+      if (color === undefined) return;
+
+      const bounds = part.bounds;
+
+      const width = bounds.max.x - bounds.min.x;
+      const height = bounds.max.y - bounds.min.y;
+
+      this.debugCollisions
+        .fillStyle(color, 0.20)
+        .fillRect(
+          bounds.min.x,
+          bounds.min.y,
+          width,
+          height
+        );
+
+      this.debugCollisions
+        .lineStyle(2, color, 1)
+        .strokeRect(
+          bounds.min.x,
+          bounds.min.y,
+          width,
+          height
+        );
+    });
+
+    // Pushbox independiente de las hurtboxes.
+    const pushbox = this.getPushboxBounds();
+
+    this.debugCollisions
+      .lineStyle(2, PUSHBOX_COLOR, 1)
+      .strokeRect(
+        pushbox.left,
+        pushbox.top,
+        pushbox.width,
+        pushbox.height
+      );
+  };
+
+  // --------------------------------------------------
   // UTILIDADES
   // --------------------------------------------------
 
   private hasAnimation(key: string) {
-    return this.definition.animations.some(
-      (animation) => animation.key === key
-    );
+    return this.animationController.has(key);
   }
 
-  private readonly updateDebugHitbox = () => {
-    const body = this.fighter.body as MatterJS.BodyType | null;
-
-    if (!body) return;
-
-    const bounds = body.bounds;
-
-    const width = bounds.max.x - bounds.min.x;
-    const height = bounds.max.y - bounds.min.y;
-
-    const radius = Math.min(width, height) / 2;
-
-    this.debugHitbox
-      .clear()
-      .lineStyle(2, 0xff0000, 1)
-      .fillStyle(0xff0000, 0.15)
-      .fillRoundedRect(
-        bounds.min.x,
-        bounds.min.y,
-        width,
-        height,
-        radius
-      )
-      .strokeRoundedRect(
-        bounds.min.x,
-        bounds.min.y,
-        width,
-        height,
-        radius
-      );
-  };
-
   private playAnimation(key: string) {
-    if (!this.hasAnimation(key)) {
-      return;
-    }
-
-    const animationKey = this.animationKey(key);
-
-    if (!this.scene.anims.exists(animationKey)) {
-      return;
-    }
-
-    if (this.visual.anims.currentAnim?.key !== animationKey) {
-      this.visual.anims.play(animationKey);
-    }
+    this.animationController.play(key);
   }
 
   private animationKey(key: string) {
-    return `${this.animationPrefix}-${key}`;
+    return this.animationController.getKey(key);
   }
 }
