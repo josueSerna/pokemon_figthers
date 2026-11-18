@@ -1,7 +1,5 @@
 
-import type {
-  NeutralAttackDefinition
-} from '../../NeutralAttackController';
+import type { NeutralAttackDefinition } from '../../neutralAttackTypes';
 
 export const charizardNeutralAttacks: (
   NeutralAttackDefinition | undefined

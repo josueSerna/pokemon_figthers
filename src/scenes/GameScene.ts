@@ -15,16 +15,12 @@ import {
 } from '../gameplay/CharacterController';
 
 import {
-  charizardNeutralAttacks
-} from '../gameplay/attacks/charizard/charizardNeutralAttacks';
-
-import {
   InputManager
 } from '../gameplay/input/InputManager';
 
 import {
   NeutralAttackController
-} from '../gameplay/NeutralAttackController';
+} from '../gameplay/attacks/NeutralAttackController';
 
 import {
   getDefaultStage,
@@ -40,8 +36,8 @@ import type {
 } from '../stages/types';
 
 import {
-  gengarNeutralAttacks
-} from '../gameplay/attacks/gengar/gengarNeutralAttacks';
+  HitStopController
+} from '../gameplay/effects/HitStopController';
 
 interface PlayerSetup {
   playerIndex: number;
@@ -53,6 +49,7 @@ interface PlayerSetup {
 interface GameSceneData {
   mode?: 1 | 2;
   characterId?: string;
+  opponentCharacterId?: string;
   players?: PlayerSetup[];
   stageId?: string;
 }
@@ -131,7 +128,9 @@ export class GameScene extends Phaser.Scene {
         ? getCharacterById(
             data.players?.[1]?.characterId ?? ''
           )
-        : undefined;
+        : getCharacterById(
+            data.opponentCharacterId ?? ''
+          );
 
     this.playerTwoCharacter =
       playerTwoChosen ??
@@ -224,9 +223,7 @@ export class GameScene extends Phaser.Scene {
 
     this.stageController.create();
 
-    // --------------------------------------------------
     // ESCENARIO Y COLISIONES
-    // --------------------------------------------------
 
     const groundY = this.stage.groundY ?? 700;
 
@@ -279,9 +276,7 @@ export class GameScene extends Phaser.Scene {
       }
     );
 
-    // --------------------------------------------------
     // CONTROLES
-    // --------------------------------------------------
 
     this.playerOneInput = new InputManager();
 
@@ -290,9 +285,7 @@ export class GameScene extends Phaser.Scene {
       gamepadIndex: this.playerTwoGamepadIndex
     });
 
-    // --------------------------------------------------
     // HABILIDADES
-    // --------------------------------------------------
 
     const playerOneAbilities =
       this.createAbilities(
@@ -304,9 +297,7 @@ export class GameScene extends Phaser.Scene {
         this.playerTwoCharacter
       );
 
-    // --------------------------------------------------
     // CREACIÓN DE LUCHADORES
-    // --------------------------------------------------
 
     this.playerOne = new CharacterController(
       this,
@@ -340,9 +331,7 @@ export class GameScene extends Phaser.Scene {
       this.playerTwo.visual.setTint(0x9ec5ff);
     }
 
-    // --------------------------------------------------
     // REFERENCIAS ENTRE LUCHADORES
-    // --------------------------------------------------
 
     this.playerOneTarget.fighter =
       this.playerTwo.fighter;
@@ -362,88 +351,45 @@ export class GameScene extends Phaser.Scene {
       this.playerOne?.takeDamage(amount);
     };
 
-    // --------------------------------------------------
+    // ATAQUES DASH
+
+    this.playerOne.setupDashAttackController();
+    this.playerTwo.setupDashAttackController();
+
     // ATAQUES NEUTRALES
-    // --------------------------------------------------
 
-    // Jugador uno: Gengar.
-    if (
-      this.playerOneCharacter.id === 'gengar'
-    ) {
-      this.playerOneNeutral = new NeutralAttackController(
-        this,
-        this.playerOne.visual,
-        this.playerTwo.fighter,
-        (damage: number) => {
-          this.playerTwo?.takeDamage(damage);
-        },
-        gengarNeutralAttacks,
-        (attacking: boolean) => {
-          this.playerOne?.setNeutralAttacking(attacking);
-        }
+    this.playerOneNeutral =
+      this.createNeutralAttackController(
+        this.playerOneCharacter,
+        this.playerOne,
+        this.playerTwo
       );
-    }
 
-    // Jugador uno: Charizard.
-    if (
-      this.playerOneCharacter.id === 'charizard'
-    ) {
-      this.playerOneNeutral = new NeutralAttackController(
-        this,
-        this.playerOne.visual,
-        this.playerTwo.fighter,
-        (damage: number) => {
-          this.playerTwo?.takeDamage(damage);
-        },
-        charizardNeutralAttacks,
-        (attacking: boolean) => {
-          this.playerOne?.setNeutralAttacking(attacking);
-        }
+    this.playerTwoNeutral =
+      this.createNeutralAttackController(
+        this.playerTwoCharacter,
+        this.playerTwo,
+        this.playerOne
       );
-    }
-
-    // Jugador dos: Gengar.
-    if (
-      this.playerTwoCharacter.id === 'gengar'
-    ) {
-      this.playerTwoNeutral = new NeutralAttackController(
-        this,
-        this.playerTwo.visual,
-        this.playerOne.fighter,
-        (damage: number) => {
-          this.playerOne?.takeDamage(damage);
-        },
-        gengarNeutralAttacks,
-        (attacking: boolean) => {
-          this.playerTwo?.setNeutralAttacking(attacking);
-        }
-      );
-    }
-
-    // Jugador dos: Charizard.
-    if (
-      this.playerTwoCharacter.id === 'charizard'
-    ) {
-      this.playerTwoNeutral = new NeutralAttackController(
-        this,
-        this.playerTwo.visual,
-        this.playerOne.fighter,
-        (damage: number) => {
-          this.playerOne?.takeDamage(damage);
-        },
-        charizardNeutralAttacks,
-        (attacking: boolean) => {
-          this.playerTwo?.setNeutralAttacking(attacking);
-        }
-      );
-    }
 
     this.createHealthBars();
   }
 
-  update(_time: number, delta: number) {
+  // ACTUALIZACIÓN DEL COMBATE
+
+  update(_time: number, delta: number): void {
+    // ACTUALIZAR INPUTS
+
     this.playerOneInput?.update();
     this.playerTwoInput?.update();
+
+    // HITSTOP
+
+    if (HitStopController.isActive(this)) {
+      return;
+    }
+
+    // ACTUALIZAR REFERENCIAS
 
     if (this.playerOne && this.playerTwo) {
       this.playerOneTarget.x =
@@ -453,20 +399,37 @@ export class GameScene extends Phaser.Scene {
         this.playerOne.fighter.x;
     }
 
-    // Actualización de los luchadores.
+    // ACTUALIZACIÓN DEL JUGADOR UNO
+
     this.playerOne?.update(delta);
+
+    if (HitStopController.isActive(this)) {
+      return;
+    }
+
+    // ACTUALIZACIÓN DEL JUGADOR DOS
+
     this.playerTwo?.update(delta);
 
-    // --------------------------------------------------
+    if (HitStopController.isActive(this)) {
+      return;
+    }
+
     // ATAQUES NEUTRALES
-    // --------------------------------------------------
 
     if (
       this.playerOneInput?.justPressed(
         'neutralAttack'
       )
     ) {
-      this.playerOneNeutral?.press();
+      this.playerOneNeutral?.press(
+        this.playerOne?.isCrouching() ?? false,
+        this.playerOne?.isAirborne() ?? false
+      );
+    }
+
+    if (HitStopController.isActive(this)) {
+      return;
     }
 
     if (
@@ -474,41 +437,95 @@ export class GameScene extends Phaser.Scene {
         'neutralAttack'
       )
     ) {
-      this.playerTwoNeutral?.press();
+      this.playerTwoNeutral?.press(
+        this.playerTwo?.isCrouching() ?? false,
+        this.playerTwo?.isAirborne() ?? false
+      );
+    }
+
+    if (HitStopController.isActive(this)) {
+      return;
     }
 
     this.playerOneNeutral?.update();
     this.playerTwoNeutral?.update();
 
-    // Evita que los luchadores se atraviesen lateralmente.
+    if (HitStopController.isActive(this)) {
+      return;
+    }
+
+    // COLISIÓN ENTRE LUCHADORES
+
     this.resolveFighterCollision();
+
+    // BARRAS DE VIDA
 
     this.updateHealthBars();
   }
 
-  // --------------------------------------------------
+  // CREACIÓN GENÉRICA DE ATAQUES NEUTRALES
+
+  private createNeutralAttackController(
+    character: CharacterDefinition,
+    attacker: CharacterController,
+    opponent: CharacterController
+  ): NeutralAttackController | undefined {
+    const neutral = character.attacks?.neutral;
+
+    if (!neutral) {
+      return undefined;
+    }
+
+    const standing = neutral.standing ?? [];
+    const crouching = neutral.crouching ?? [];
+    const air = neutral.air;
+
+    const hasAttacks =
+      standing.some(Boolean) ||
+      crouching.some(Boolean) ||
+      !!air;
+
+    if (!hasAttacks) {
+      return undefined;
+    }
+
+    return new NeutralAttackController(
+      this,
+      attacker.visual,
+      opponent.fighter,
+      (damage: number) => {
+        opponent.takeDamage(damage);
+      },
+      [...standing],
+      (attacking: boolean) => {
+        attacker.setNeutralAttacking(attacking);
+      },
+      [...crouching],
+      air
+    );
+  }
+
   // COLISIÓN ENTRE LUCHADORES
-  // --------------------------------------------------
 
   private resolveFighterCollision() {
     if (!this.playerOne || !this.playerTwo) {
       return;
     }
 
-    const boundsOne = this.playerOne.getPushboxBounds();
-    const boundsTwo = this.playerTwo.getPushboxBounds();
+    const boundsOne =
+      this.playerOne.getPushboxBounds();
 
-    // Comprueba si las pushboxes se encuentran a la misma altura.
+    const boundsTwo =
+      this.playerTwo.getPushboxBounds();
+
     const verticalOverlap =
       boundsOne.top < boundsTwo.bottom &&
       boundsOne.bottom > boundsTwo.top;
 
-    // Si no están a la misma altura, pueden pasar por encima.
     if (!verticalOverlap) {
       return;
     }
 
-    // Comprueba cuánto se están superponiendo horizontalmente.
     const overlapX =
       Math.min(boundsOne.right, boundsTwo.right) -
       Math.max(boundsOne.left, boundsTwo.left);
@@ -517,8 +534,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Identifica qué personaje está a cada lado.
-    const oneIsLeft = boundsOne.centerX <= boundsTwo.centerX;
+    const oneIsLeft =
+      boundsOne.centerX <= boundsTwo.centerX;
 
     const leftPlayer = oneIsLeft
       ? this.playerOne
@@ -536,7 +553,6 @@ export class GameScene extends Phaser.Scene {
       ? boundsTwo
       : boundsOne;
 
-    // Espacio disponible antes de alcanzar los límites.
     const leftAvailable = Math.max(
       0,
       leftBounds.centerX - leftBounds.width / 2
@@ -549,7 +565,6 @@ export class GameScene extends Phaser.Scene {
         rightBounds.centerX
     );
 
-    // Se intenta repartir el empuje entre ambos personajes.
     const totalOverlap = overlapX + 0.5;
 
     let leftMovement = Math.min(
@@ -562,7 +577,6 @@ export class GameScene extends Phaser.Scene {
       rightAvailable
     );
 
-    // Si uno está contra la pared, el otro absorbe el empuje restante.
     let remaining =
       totalOverlap - leftMovement - rightMovement;
 
@@ -585,17 +599,15 @@ export class GameScene extends Phaser.Scene {
       rightMovement += extraRight;
     }
 
-    // Separa los personajes utilizando sus pushboxes.
     leftPlayer.moveByPushboxX(-leftMovement);
     rightPlayer.moveByPushboxX(rightMovement);
   }
 
-  // --------------------------------------------------
   // LIMPIEZA
-  // --------------------------------------------------
 
   private cleanup() {
-    // Destruir ataques antes que los luchadores.
+    HitStopController.cancel(this);
+
     this.playerOneNeutral?.destroy();
     this.playerTwoNeutral?.destroy();
 
@@ -622,9 +634,7 @@ export class GameScene extends Phaser.Scene {
     this.playerTwoTarget = { x: 320 };
   }
 
-  // --------------------------------------------------
   // HABILIDADES
-  // --------------------------------------------------
 
   private createAbilities(
     _character: CharacterDefinition
@@ -632,9 +642,7 @@ export class GameScene extends Phaser.Scene {
     return [];
   }
 
-  // --------------------------------------------------
   // BARRAS DE VIDA
-  // --------------------------------------------------
 
   private createHealthBars() {
     this.createHealthBar(

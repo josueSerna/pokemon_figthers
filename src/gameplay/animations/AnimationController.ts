@@ -100,6 +100,14 @@ export class AnimationController {
     );
   }
 
+  getCurrentFrameIndex(key: string): number | undefined {
+    if (!this.isPlaying(key)) {
+      return undefined;
+    }
+
+    return this.visual.anims.currentFrame?.index;
+  }
+
   getKey(key: string) {
     return `${this.animationPrefix}-${key}`;
   }

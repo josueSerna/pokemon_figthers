@@ -8,6 +8,8 @@ import './style.css';
 import { ModeSelectScene } from './scenes/ModeselectScene';
 import { PlaySelectScene } from './scenes/PlayselectScene';
 import { StageSelectScene } from './stages/Stageselectscene';
+import { VersusScene } from './scenes/VersusScene';
+import { HurtboxTestScene } from './scenes/HurtboxTestScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -32,12 +34,14 @@ const config: Phaser.Types.Core.GameConfig = {
   },
 
   scene: [
+      // HurtboxTestScene,
     IntroScene,
     MainMenuScene,
     PlaySelectScene,
     ModeSelectScene,
     CharacterSelectScene,
     StageSelectScene,
+    VersusScene,
     GameScene
   ]
 };

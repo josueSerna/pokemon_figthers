@@ -1,10 +1,12 @@
 import type { StageDefinition } from './types';
 import { wydonStadium } from './WydonStadium';
 import { lavanderTown } from './LavanderTown';
+import { mtBlaze } from './MtBlaze';
 
 const stages: StageDefinition[] = [
   wydonStadium,
-  lavanderTown
+  lavanderTown,
+  mtBlaze
 ];
 
 export function getStages() {

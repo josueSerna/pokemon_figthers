@@ -1,47 +1,11 @@
 
 import Phaser from 'phaser';
 
+import type {
+  NeutralAttackDefinition
+} from './neutralAttackTypes';
+
 export type NeutralAttackType = 'melee' | 'ranged';
-
-export interface NeutralImpactDefinition {
-  textureKey: string;
-  animationKey?: string;
-  frameStart?: number;
-  frameEnd?: number;
-  frameRate?: number;
-  scale?: number;
-  offsetX?: number;
-  offsetY?: number;
-}
-
-export interface NeutralSecondaryAnimation {
-  textureKey: string;
-  animationKey: string;
-  frameStart: number;
-  frameEnd: number;
-  frameRate: number;
-  triggerFrame: number;
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-}
-
-export interface NeutralAttackDefinition {
-  type: NeutralAttackType;
-  animationKey: string;
-  textureKey: string;
-  damage: number;
-  activeFrames: number[];
-  frameStart: number;
-  frameEnd: number;
-  frameRate: number;
-  hitboxWidth: number;
-  hitboxHeight: number;
-  hitboxOffsetX: number;
-  hitboxOffsetY: number;
-  secondaryAnimation?: NeutralSecondaryAnimation;
-  impact?: NeutralImpactDefinition;
-}
 
 export class NeutralAttackController {
   private readonly scene: Phaser.Scene;
@@ -51,6 +15,8 @@ export class NeutralAttackController {
   private readonly onAttackStateChange: (attacking: boolean) => void;
 
   private readonly attacks: (NeutralAttackDefinition | undefined)[];
+  private readonly crouchAttacks: (NeutralAttackDefinition | undefined)[];
+  private readonly airAttack?: NeutralAttackDefinition;
 
   private readonly attackSprite: Phaser.GameObjects.Sprite;
   private readonly hitboxGraphics: Phaser.GameObjects.Graphics;
@@ -58,18 +24,27 @@ export class NeutralAttackController {
   private secondarySprite?: Phaser.GameObjects.Sprite;
   private impactSprite?: Phaser.GameObjects.Sprite;
 
-  private comboIndex = 0;
-  private comboDeadline = 0;
+  private comboStates = {
+    standing: {
+      index: 0,
+      deadline: 0
+    },
+    crouching: {
+      index: 0,
+      deadline: 0
+    }
+  };
 
   private attacking = false;
   private bufferedPress = false;
+  private bufferedCrouching = false;
   private hasHit = false;
   private secondaryPlayed = false;
   private previousVisibility = true;
 
   private currentAttack?: NeutralAttackDefinition;
 
-  // Posición vertical conservada durante el ataque.
+  // Posición vertical conservada durante los ataques terrestres.
   private attackBaseY = 0;
 
   constructor(
@@ -78,21 +53,33 @@ export class NeutralAttackController {
     opponent: Phaser.Physics.Matter.Sprite,
     takeDamage: (amount: number) => void,
     attacks: (NeutralAttackDefinition | undefined)[],
-    onAttackStateChange: (attacking: boolean) => void = () => {}
+    onAttackStateChange: (attacking: boolean) => void = () => {},
+    crouchAttacks: (NeutralAttackDefinition | undefined)[] = [],
+    airAttack?: NeutralAttackDefinition
   ) {
     this.scene = scene;
     this.attacker = attacker;
     this.opponent = opponent;
     this.takeDamage = takeDamage;
     this.attacks = attacks;
+    this.crouchAttacks = crouchAttacks;
     this.onAttackStateChange = onAttackStateChange;
+    this.airAttack = airAttack;
 
-    const firstAttack = attacks.find(
+    const allAttacks = [
+      ...this.attacks,
+      ...this.crouchAttacks,
+      this.airAttack
+    ].filter(
       (attack): attack is NeutralAttackDefinition => !!attack
     );
 
+    const firstAttack = allAttacks[0];
+
     if (!firstAttack) {
-      throw new Error('El Pokémon necesita al menos un ataque configurado.');
+      throw new Error(
+        'El Pokémon necesita al menos un ataque configurado.'
+      );
     }
 
     if (!scene.textures.exists(firstAttack.textureKey)) {
@@ -112,9 +99,15 @@ export class NeutralAttackController {
   }
 
   private createAnimations(): void {
-    for (const attack of this.attacks) {
-      if (!attack) continue;
+    const allAttacks = [
+      ...this.attacks,
+      ...this.crouchAttacks,
+      this.airAttack
+    ].filter(
+      (attack): attack is NeutralAttackDefinition => attack !== undefined
+    );
 
+    for (const attack of allAttacks) {
       this.createAnimation(
         attack.textureKey,
         attack.animationKey,
@@ -203,27 +196,72 @@ export class NeutralAttackController {
     });
   }
 
-  press(): void {
-    if (this.attacking) {
-      this.bufferedPress = true;
+  press(
+    isCrouching = false,
+    isAirborne = false
+  ): void {
+    // Ataque aéreo independiente del combo terrestre.
+    if (isAirborne) {
+      if (this.attacking || !this.airAttack) {
+        return;
+      }
+
+      if (
+        !this.scene.textures.exists(this.airAttack.textureKey) ||
+        !this.scene.anims.exists(this.airAttack.animationKey)
+      ) {
+        console.error(
+          `[NeutralAttackController] No se puede reproducir el ataque aéreo "${this.airAttack.animationKey}".`
+        );
+        return;
+      }
+
+      this.startAttack(this.airAttack);
       return;
     }
 
-    const now = this.scene.time.now;
+    const hasCrouchAttacks = this.crouchAttacks.some(
+      (attack) => !!attack
+    );
 
-    if (now > this.comboDeadline) {
-      this.comboIndex = 0;
+    const useCrouchAttacks =
+      isCrouching && hasCrouchAttacks;
+
+    if (this.attacking) {
+      this.bufferedPress = true;
+      this.bufferedCrouching = useCrouchAttacks;
+      return;
     }
 
-    this.startNextAttack();
+    this.startNextAttack(useCrouchAttacks);
   }
 
-  private startNextAttack(): void {
-    const attack = this.attacks[this.comboIndex];
+  private startNextAttack(useCrouchAttacks: boolean): void {
+    const selectedAttacks = useCrouchAttacks
+      ? this.crouchAttacks
+      : this.attacks;
+
+    const comboState = useCrouchAttacks
+      ? this.comboStates.crouching
+      : this.comboStates.standing;
+
+    const now = this.scene.time.now;
+
+    if (now > comboState.deadline) {
+      comboState.index = 0;
+    }
+
+    let attack = selectedAttacks[comboState.index];
+
+    // Si no existe el ataque de esa posición, reiniciamos el combo.
+    if (!attack) {
+      comboState.index = 0;
+      attack = selectedAttacks[0];
+    }
 
     if (!attack) {
-      this.comboIndex = 0;
       this.bufferedPress = false;
+      this.bufferedCrouching = false;
       this.onAttackStateChange(false);
       return;
     }
@@ -237,14 +275,17 @@ export class NeutralAttackController {
         'Falta su textura o animación.'
       );
 
-      this.comboIndex = 0;
+      comboState.index = 0;
       this.bufferedPress = false;
+      this.bufferedCrouching = false;
       this.onAttackStateChange(false);
       return;
     }
 
-    this.comboIndex = (this.comboIndex + 1) % this.attacks.length;
-    this.comboDeadline = this.scene.time.now + 900;
+    comboState.index =
+      (comboState.index + 1) % selectedAttacks.length;
+
+    comboState.deadline = now + 900;
 
     this.startAttack(attack);
   }
@@ -257,7 +298,7 @@ export class NeutralAttackController {
 
     this.onAttackStateChange(true);
 
-    // Conservamos la altura al comenzar el ataque.
+    // Conservamos la altura inicial para los ataques terrestres.
     this.attackBaseY = this.attacker.y;
 
     this.previousVisibility = this.attacker.visible;
@@ -365,8 +406,12 @@ export class NeutralAttackController {
   }
 
   private syncAttackSprite(): void {
+    const y = this.currentAttack?.followAttackerY
+      ? this.attacker.y
+      : this.attackBaseY;
+
     this.attackSprite
-      .setPosition(this.attacker.x, this.attackBaseY)
+      .setPosition(this.attacker.x, y)
       .setScale(this.attacker.scaleX, this.attacker.scaleY)
       .setFlipX(this.attacker.flipX)
       .setDepth(this.attacker.depth + 1)
@@ -382,7 +427,11 @@ export class NeutralAttackController {
       ? this.attacker.x - attack.hitboxOffsetX - attack.hitboxWidth
       : this.attacker.x + attack.hitboxOffsetX;
 
-    const y = this.attackBaseY + attack.hitboxOffsetY;
+    const baseY = attack.followAttackerY
+      ? this.attacker.y
+      : this.attackBaseY;
+
+    const y = baseY + attack.hitboxOffsetY;
 
     return new Phaser.Geom.Rectangle(
       x,
@@ -506,7 +555,12 @@ export class NeutralAttackController {
 
     if (this.bufferedPress) {
       this.bufferedPress = false;
-      this.startNextAttack();
+
+      const useCrouchAttacks = this.bufferedCrouching;
+
+      this.bufferedCrouching = false;
+
+      this.startNextAttack(useCrouchAttacks);
       return;
     }
 
@@ -528,6 +582,7 @@ export class NeutralAttackController {
 
     this.attacking = false;
     this.bufferedPress = false;
+    this.bufferedCrouching = false;
     this.currentAttack = undefined;
   }
 }

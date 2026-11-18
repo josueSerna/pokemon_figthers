@@ -457,7 +457,7 @@ export class StageSelectScene extends Phaser.Scene {
 
     if (!stage) return;
 
-    this.scene.start('GameScene', {
+    this.scene.start('VersusScene', {
       ...this.matchData,
       stageId: stage.id
     });

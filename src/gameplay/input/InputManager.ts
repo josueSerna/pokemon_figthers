@@ -1,3 +1,4 @@
+
 import type {
   InputAction,
   InputManagerOptions,
@@ -10,7 +11,8 @@ const defaultBindings: Record<InputAction, KeyboardBinding> = {
   jump: ['Space', 'KeyW'],
   crouch: ['ArrowDown', 'KeyS'],
   neutralAttack: 'KeyK',
-  specialAttack: 'KeyJ'
+  specialAttack: 'KeyJ',
+  dashAttack: 'KeyL'
 };
 
 const defaultGamepadBindings: Partial<Record<InputAction, number>> = {
@@ -25,9 +27,12 @@ export class InputManager {
   private readonly bindings: Record<InputAction, KeyboardBinding>;
   private readonly keyboardEnabled: boolean;
   private readonly gamepadIndex?: number;
+
   private readonly keyboardState = new Set<string>();
+
   private previousState = new Set<InputAction>();
   private currentState = new Set<InputAction>();
+
   private gamepadConnected = false;
 
   constructor(options: InputManagerOptions = {}) {
@@ -35,26 +40,38 @@ export class InputManager {
       ...defaultBindings,
       ...options.keyboardBindings
     };
+
     this.keyboardEnabled = options.keyboardEnabled ?? true;
     this.gamepadIndex = options.gamepadIndex;
+
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
-    window.addEventListener('gamepadconnected', this.handleGamepadConnection);
-    window.addEventListener('gamepaddisconnected', this.handleGamepadConnection);
+
+    window.addEventListener(
+      'gamepadconnected',
+      this.handleGamepadConnection
+    );
+
+    window.addEventListener(
+      'gamepaddisconnected',
+      this.handleGamepadConnection
+    );
   }
 
   update() {
     this.previousState = this.currentState;
     this.currentState = new Set<InputAction>();
+
     (Object.keys(this.bindings) as InputAction[]).forEach((action) => {
-      const bindings = this.bindings[action] === undefined
-        ? []
-        : Array.isArray(this.bindings[action])
-          ? this.bindings[action]
-          : [this.bindings[action]];
+      const binding = this.bindings[action];
+
+      const bindings = Array.isArray(binding)
+        ? binding
+        : [binding];
+
       if (
         this.keyboardEnabled &&
-        bindings.some((binding) => this.keyboardState.has(binding))
+        bindings.some((key) => this.keyboardState.has(key))
       ) {
         this.currentState.add(action);
       }
@@ -63,17 +80,34 @@ export class InputManager {
     const gamepad = this.gamepadIndex === undefined
       ? undefined
       : navigator.getGamepads()[this.gamepadIndex];
+
     if (gamepad) {
       this.gamepadConnected = true;
-      (Object.keys(defaultGamepadBindings) as InputAction[]).forEach((action) => {
-        const buttonIndex = defaultGamepadBindings[action];
-        if (buttonIndex !== undefined && gamepad.buttons[buttonIndex]?.pressed) {
-          this.currentState.add(action);
+
+      (Object.keys(defaultGamepadBindings) as InputAction[]).forEach(
+        (action) => {
+          const buttonIndex = defaultGamepadBindings[action];
+
+          if (
+            buttonIndex !== undefined &&
+            gamepad.buttons[buttonIndex]?.pressed
+          ) {
+            this.currentState.add(action);
+          }
         }
-      });
-      if (gamepad.axes[0] < -0.25) this.currentState.add('moveLeft');
-      if (gamepad.axes[0] > 0.25) this.currentState.add('moveRight');
-      if (gamepad.axes[1] > 0.25) this.currentState.add('crouch');
+      );
+
+      if (gamepad.axes[0] < -0.25) {
+        this.currentState.add('moveLeft');
+      }
+
+      if (gamepad.axes[0] > 0.25) {
+        this.currentState.add('moveRight');
+      }
+
+      if (gamepad.axes[1] > 0.25) {
+        this.currentState.add('crouch');
+      }
     }
   }
 
@@ -82,11 +116,17 @@ export class InputManager {
   }
 
   justPressed(action: InputAction) {
-    return this.currentState.has(action) && !this.previousState.has(action);
+    return (
+      this.currentState.has(action) &&
+      !this.previousState.has(action)
+    );
   }
 
   justReleased(action: InputAction) {
-    return !this.currentState.has(action) && this.previousState.has(action);
+    return (
+      !this.currentState.has(action) &&
+      this.previousState.has(action)
+    );
   }
 
   isGamepadConnected() {
@@ -96,8 +136,16 @@ export class InputManager {
   destroy() {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
-    window.removeEventListener('gamepadconnected', this.handleGamepadConnection);
-    window.removeEventListener('gamepaddisconnected', this.handleGamepadConnection);
+
+    window.removeEventListener(
+      'gamepadconnected',
+      this.handleGamepadConnection
+    );
+
+    window.removeEventListener(
+      'gamepaddisconnected',
+      this.handleGamepadConnection
+    );
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent) => {
