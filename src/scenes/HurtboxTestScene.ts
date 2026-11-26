@@ -6,10 +6,41 @@ import {
   getCharacters
 } from '../characters/registry';
 
-import type { CharacterDefinition } from '../characters/types';
+import type {
+  CharacterDefinition
+} from '../characters/types';
 
-import { CharacterController } from '../gameplay/CharacterController';
-import { InputManager } from '../gameplay/input/InputManager';
+import {
+  CharacterController
+} from '../gameplay/CharacterController';
+
+import {
+  InputManager
+} from '../gameplay/input/InputManager';
+
+import {
+  NeutralAttackController
+} from '../gameplay/attacks/NeutralAttackController';
+
+import type {
+  NeutralVisualEffectPlayer
+} from '../gameplay/attacks/NeutralAttackController';
+
+import {
+  ShadowClawEffect
+} from '../gameplay/effects/movements/ShadowClaw/ShadowClawEffect';
+
+import {
+  AstonishEffect
+} from '../gameplay/effects/movements/Astonish/AstonishEffect';
+
+import {
+  LickEffect
+} from '../gameplay/effects/movements/Lick/LickEffect';
+
+import {
+  NeutralVisualEffectGroup
+} from '../gameplay/effects/NeutralVisualEffectGroup';
 
 interface HurtboxTestSceneData {
   characterId?: string;
@@ -30,15 +61,37 @@ export class HurtboxTestScene extends Phaser.Scene {
   private readonly groundY = 650;
 
   private character!: CharacterDefinition;
+  private opponentCharacter!: CharacterDefinition;
 
   private characterController?: CharacterController;
+  private opponentController?: CharacterController;
+
   private inputManager?: InputManager;
+  private opponentInputManager?: InputManager;
+
+  private neutralAttackController?: NeutralAttackController;
 
   private debugGraphics?: Phaser.GameObjects.Graphics;
 
   private oneKey?: Phaser.Input.Keyboard.Key;
   private twoKey?: Phaser.Input.Keyboard.Key;
   private threeKey?: Phaser.Input.Keyboard.Key;
+
+  private characterTarget: {
+    x: number;
+    fighter?: Phaser.Physics.Matter.Sprite;
+    takeDamage?: (amount: number) => void;
+  } = {
+    x: 960
+  };
+
+  private opponentTarget: {
+    x: number;
+    fighter?: Phaser.Physics.Matter.Sprite;
+    takeDamage?: (amount: number) => void;
+  } = {
+    x: 320
+  };
 
   private readonly characterIds = [
     'lucario',
@@ -50,40 +103,102 @@ export class HurtboxTestScene extends Phaser.Scene {
     super('HurtboxTestScene');
   }
 
+  // INICIALIZACIÓN
+
   init(data: HurtboxTestSceneData = {}): void {
     const available = getCharacters().filter(
-      character => character.availability === 'available'
+      character =>
+        character.availability === 'available' &&
+        this.characterIds.includes(character.id)
     );
 
-    const fallback = available[0] ?? getCharacters()[0];
+    const fallback =
+      available[0] ??
+      getCharacterById(this.characterIds[0]);
 
     this.character =
       getCharacterById(data.characterId ?? '') ??
-      fallback;
+      fallback!;
 
     if (!this.character) {
-      throw new Error('No hay personajes disponibles para probar.');
+      throw new Error(
+        'No hay personajes disponibles para probar.'
+      );
+    }
+
+    const opponentPool = available.filter(
+      character => character.id !== this.character.id
+    );
+
+    this.opponentCharacter =
+      Phaser.Utils.Array.GetRandom(opponentPool) ??
+      getCharacterById(
+        this.characterIds.find(
+          id => id !== this.character.id
+        ) ?? ''
+      )!;
+
+    if (!this.opponentCharacter) {
+      throw new Error(
+        'No se encontró otro Pokémon para utilizar como objetivo.'
+      );
+    }
+
+    this.characterTarget = {
+      x: 960
+    };
+
+    this.opponentTarget = {
+      x: 320
+    };
+  }
+
+  // CARGA DE RECURSOS
+
+  preload(): void {
+    const unique = new Map<string, CharacterDefinition>();
+
+    [
+      this.character,
+      this.opponentCharacter
+    ].forEach(character => {
+      unique.set(character.id, character);
+    });
+
+    unique.forEach(character => {
+      Object.values(character.assets.spriteSheets).forEach(
+        asset => {
+          if (this.textures.exists(asset.key)) {
+            return;
+          }
+
+          this.load.spritesheet(
+            asset.key,
+            asset.path,
+            {
+              frameWidth: asset.frameWidth,
+              frameHeight: asset.frameHeight
+            }
+          );
+        }
+      );
+    });
+
+    const shadowClawKey = 'shadow-claw';
+
+    if (!this.textures.exists(shadowClawKey)) {
+      this.load.spritesheet(
+        shadowClawKey,
+        '/assets/movements/shadow_claw.png',
+        {
+          frameWidth: 256,
+          frameHeight: 256
+        }
+      );
     }
   }
 
-  preload(): void {
-    Object.values(this.character.assets.spriteSheets).forEach(
-      asset => {
-        if (this.textures.exists(asset.key)) {
-          return;
-        }
-
-        this.load.spritesheet(
-          asset.key,
-          asset.path,
-          {
-            frameWidth: asset.frameWidth,
-            frameHeight: asset.frameHeight
-          }
-        );
-      }
-    );
-  }
+  // CREACIÓN DE ESCENA
 
   create(): void {
     this.events.once(
@@ -95,21 +210,41 @@ export class HurtboxTestScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#17243b');
 
     this.createGround();
-    this.createCharacter();
+    this.createInputs();
+    this.createFighters();
+    this.createNeutralAttackController();
+
     this.createDebugGraphics();
     this.createInstructions();
     this.createKeyboardControls();
   }
 
+  // ACTUALIZACIÓN
+
   update(_time: number, delta: number): void {
     this.inputManager?.update();
+    this.opponentInputManager?.update();
 
     this.characterController?.update(delta);
+    this.opponentController?.update(delta);
+
+    if (
+      this.inputManager?.justPressed('neutralAttack')
+    ) {
+      this.neutralAttackController?.press(
+        this.characterController?.isCrouching() ?? false,
+        this.characterController?.isAirborne() ?? false
+      );
+    }
+
+    this.neutralAttackController?.update();
 
     this.drawHurtboxes();
 
     this.checkCharacterSelection();
   }
+
+  // ESCENARIO
 
   private createGround(): void {
     this.add.rectangle(
@@ -155,26 +290,154 @@ export class HurtboxTestScene extends Phaser.Scene {
     );
   }
 
-  private createCharacter(): void {
+  // CONTROLES
+
+  private createInputs(): void {
     this.inputManager = new InputManager();
 
-    const target = {
-      x: this.screenWidth - 100
-    };
+    this.opponentInputManager = new InputManager({
+      keyboardEnabled: false
+    });
+  }
 
+  // CREACIÓN DE LUCHADORES
+
+  private createFighters(): void {
     this.characterController = new CharacterController(
       this,
       this.character,
-      target,
-      this.inputManager,
+      this.characterTarget,
+      this.inputManager!,
       [],
-      this.screenWidth / 2,
-      'hurtbox-test',
+      320,
+      'hurtbox-test-player',
+      this.groundY
+    );
+
+    this.opponentController = new CharacterController(
+      this,
+      this.opponentCharacter,
+      this.opponentTarget,
+      this.opponentInputManager!,
+      [],
+      960,
+      'hurtbox-test-opponent',
       this.groundY
     );
 
     this.characterController.setup();
+    this.opponentController.setup();
+
+    this.characterTarget.fighter =
+      this.opponentController.fighter;
+
+    this.characterTarget.takeDamage = (
+      _amount: number
+    ) => {};
+
+    this.opponentTarget.fighter =
+      this.characterController.fighter;
+
+    this.opponentTarget.takeDamage = (
+      _amount: number
+    ) => {};
+
+    this.characterController.setupDashAttackController();
   }
+
+  // ATAQUES NEUTRALES
+
+  private createNeutralAttackController(): void {
+    const neutral = this.character.attacks?.neutral;
+
+    if (
+      !neutral ||
+      !this.characterController ||
+      !this.opponentController
+    ) {
+      return;
+    }
+
+    const standing = neutral.standing ?? [];
+    const crouching = neutral.crouching ?? [];
+    const air = neutral.air;
+
+    const allAttacks = [
+      ...standing,
+      ...crouching,
+      air
+    ];
+
+    if (!allAttacks.some(Boolean)) {
+      return;
+    }
+
+    const effectPlayers: NeutralVisualEffectPlayer[] = [];
+
+    const hasShadowClaw = allAttacks.some(
+      attack =>
+        attack?.visualEffect?.key === 'shadow-claw'
+    );
+
+    const hasAstonish = allAttacks.some(
+      attack =>
+        attack?.visualEffect?.key === 'astonish'
+    );
+
+    const hasLick = allAttacks.some(
+      attack =>
+        attack?.visualEffect?.key === 'lick' ||
+        attack?.hitVisualEffect?.key === 'lick'
+    );
+
+    if (hasShadowClaw) {
+      effectPlayers.push(
+        new ShadowClawEffect(this)
+      );
+    }
+
+    if (hasAstonish) {
+      effectPlayers.push(
+        new AstonishEffect(this)
+      );
+    }
+
+    if (hasLick) {
+      effectPlayers.push(
+        new LickEffect(this)
+      );
+    }
+
+    const visualEffectPlayer =
+      effectPlayers.length > 0
+        ? new NeutralVisualEffectGroup(effectPlayers)
+        : undefined;
+
+    this.neutralAttackController = new NeutralAttackController(
+      this,
+      this.characterController.visual,
+      this.opponentController.fighter,
+      (_damage: number) => {},
+      [...standing],
+      (
+        attacking: boolean,
+        crouchingAttack: boolean
+      ) => {
+        this.characterController?.setNeutralAttacking(
+          attacking,
+          crouchingAttack
+        );
+      },
+      [...crouching],
+      air,
+      visualEffectPlayer,
+      (active: boolean) => {
+        this.characterController?.setHexActive(active);
+      }
+    );
+  }
+
+  // HURTBOXES
 
   private createDebugGraphics(): void {
     this.debugGraphics = this.add.graphics();
@@ -183,26 +446,45 @@ export class HurtboxTestScene extends Phaser.Scene {
 
   private drawHurtboxes(): void {
     const graphics = this.debugGraphics;
-    const fighter = this.characterController?.fighter;
 
-    if (!graphics || !fighter) {
+    const playerOne = this.characterController?.fighter;
+    const playerTwo = this.opponentController?.fighter;
+
+    if (!graphics || !playerOne || !playerTwo) {
       return;
     }
 
     graphics.clear();
 
+    this.drawFighterHurtboxes(
+      graphics,
+      playerOne
+    );
+
+    this.drawFighterHurtboxes(
+      graphics,
+      playerTwo
+    );
+  }
+
+  private drawFighterHurtboxes(
+    graphics: Phaser.GameObjects.Graphics,
+    fighter: Phaser.Physics.Matter.Sprite
+  ): void {
     const body = fighter.body as MatterJS.BodyType;
 
-    // El primer elemento representa el cuerpo compuesto.
-    // Los siguientes son las tres cajas individuales.
+    if (!body) {
+      return;
+    }
+
     const parts = body.parts.length > 1
       ? body.parts.slice(1)
       : [body];
 
     const colors = [
-      0xff5555, // Head
-      0x55aaff, // Torso
-      0x55dd88  // Legs
+      0xff5555,
+      0x55aaff,
+      0x55dd88
     ];
 
     parts.forEach((part, index) => {
@@ -239,11 +521,13 @@ export class HurtboxTestScene extends Phaser.Scene {
     });
   }
 
+  // INSTRUCCIONES
+
   private createInstructions(): void {
     this.add.text(
       20,
       20,
-      `HURTBOX TEST - ${this.character.name.toUpperCase()}`,
+      `HURTBOX TEST - ${this.character.name.toUpperCase()} VS ${this.opponentCharacter.name.toUpperCase()}`,
       {
         fontFamily: 'Arial',
         fontSize: '24px',
@@ -266,7 +550,7 @@ export class HurtboxTestScene extends Phaser.Scene {
     this.add.text(
       20,
       90,
-      '1: Lucario | 2: Gengar | 3: Charizard',
+      'J: Ataque neutral | 1: Lucario | 2: Gengar | 3: Charizard',
       {
         fontFamily: 'Arial',
         fontSize: '16px',
@@ -286,6 +570,8 @@ export class HurtboxTestScene extends Phaser.Scene {
       }
     ).setDepth(200);
   }
+
+  // SELECCIÓN DE PERSONAJES
 
   private createKeyboardControls(): void {
     const keyboard = this.input.keyboard;
@@ -344,12 +630,33 @@ export class HurtboxTestScene extends Phaser.Scene {
     this.scene.restart({ characterId });
   }
 
+  // LIMPIEZA
+
   private cleanup(): void {
+    this.neutralAttackController?.destroy();
+
     this.characterController?.destroy();
+    this.opponentController?.destroy();
+
     this.inputManager?.destroy();
+    this.opponentInputManager?.destroy();
+
+    this.neutralAttackController = undefined;
 
     this.characterController = undefined;
+    this.opponentController = undefined;
+
     this.inputManager = undefined;
+    this.opponentInputManager = undefined;
+
     this.debugGraphics = undefined;
+
+    this.characterTarget = {
+      x: 960
+    };
+
+    this.opponentTarget = {
+      x: 320
+    };
   }
 }

@@ -1,7 +1,7 @@
 
 import Phaser from 'phaser';
 
-import type { CharacterDefinition } from '../../characters/types';
+import type { CharacterDefinition } from '../../../characters/types';
 
 import type {
   CharacterHurtboxDefinition,
@@ -162,16 +162,7 @@ export class HurtboxController {
 
     const boxes = [head, torso, legs];
 
-    // Calculamos el centro de masa utilizando el área de cada caja.
-    const areas = boxes.map(
-      (box) => box.width * box.height
-    );
-
-    const totalArea = areas.reduce(
-      (total, area) => total + area,
-      0
-    );
-
+    // Validamos las dimensiones y posiciones.
     if (
       boxes.some(
         (box) =>
@@ -179,37 +170,28 @@ export class HurtboxController {
           box.height <= 0 ||
           !Number.isFinite(box.offsetX) ||
           !Number.isFinite(box.offsetY)
-      ) ||
-      totalArea <= 0
+      )
     ) {
       throw new Error(
         `Configuración de hurtboxes inválida para ${this.definition.id}`
       );
     }
 
-    const centerOfMassX = boxes.reduce(
-      (total, box, index) =>
-        total + box.offsetX * areas[index],
-      0
-    ) / totalArea;
+    const flipDirection = this.visual.flipX ? -1 : 1;
 
-    const centerOfMassY = boxes.reduce(
-      (total, box, index) =>
-        total + box.offsetY * areas[index],
-      0
-    ) / totalArea;
-
+    // Creamos cada hurtbox en su posición original.
     const bodies = this.scene.matter.bodies;
 
     const parts: MatterJS.BodyType[] = boxes.map((box) =>
       bodies.rectangle(
-        box.offsetX - centerOfMassX,
-        box.offsetY - centerOfMassY,
+        box.offsetX * flipDirection,
+        box.offsetY,
         box.width,
         box.height
       )
     );
 
+    // Matter.js calcula el centro de masa del cuerpo compuesto.
     const body = this.scene.matter.body.create({
       parts,
       friction: 0,
@@ -219,12 +201,10 @@ export class HurtboxController {
       label: 'fighter-hurtboxes'
     });
 
-    const flipDirection = this.visual.flipX ? -1 : 1;
-
     return {
       body,
-      offsetX: centerOfMassX * flipDirection,
-      offsetY: centerOfMassY
+      offsetX: body.position.x,
+      offsetY: body.position.y
     };
   }
 }

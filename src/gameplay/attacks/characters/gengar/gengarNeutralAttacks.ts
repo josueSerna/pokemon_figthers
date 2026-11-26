@@ -1,64 +1,104 @@
 
-import type { NeutralAttackDefinition } from '../../NeutralAttackController';
+import type { NeutralAttackDefinition } from '../../neutralAttackTypes';
 
 export const gengarNeutralAttacks: (
   NeutralAttackDefinition | undefined
 )[] = [
   {
-    type: 'melee',
+  type: 'melee',
 
-    animationKey: 'gengar-neutral-one',
-    textureKey: 'gengar-neutral-one',
+  animationKey: 'neutral-one',
+  textureKey: 'gengar-neutral-one',
 
-    damage: 5,
+  damage: 5,
 
-    frameStart: 0,
-    frameEnd: 5,
-    frameRate: 12,
+  frameStart: 0,
+  frameEnd: 4,
+  frameRate: 12,
 
-    activeFrames: [2, 3],
+  activeFrames: [3, 4],
 
-    hitboxWidth: 120,
-    hitboxHeight: 52,
-    hitboxOffsetX: -100,
-    hitboxOffsetY: 40
+  hitboxWidth: 200,
+  hitboxHeight: 150,
+  hitboxOffsetX: -200,
+  hitboxOffsetY: -20,
+
+  visualEffect: {
+    key: 'shadow-claw',
+    triggerFrame: 1,
+    offsetX: 20,
+    offsetY: 10,
+    scale: 1,
+    rotation: -20,
+  }
+},
+ {
+  type: 'ranged',
+
+  animationKey: 'neutral-two',
+  textureKey: 'gengar-neutral-two',
+
+  damage: 5,
+
+  frameStart: 0,
+  frameEnd: 4,
+  frameRate: 12,
+
+  activeFrames: [3, 4],
+
+  hitboxWidth: 250,
+  hitboxHeight: 100,
+  hitboxOffsetX: -200,
+  hitboxOffsetY: -50,
+
+  visualEffect: {
+    key: 'astonish',
+    triggerFrame: 3,
+    scale: 1
   },
 
-  {
-    type: 'ranged',
+  hitVisualEffect: {
+    key: 'astonish',
+    triggerFrame: 3,
+    scale: 1
+  }
+},
 
-    animationKey: 'gengar-neutral-two',
-    textureKey: 'gengar-neutral-two',
+{
+  type: 'melee',
 
-    damage: 15,
+  animationKey: 'neutral-three',
+  textureKey: 'gengar-neutral-three',
 
-    frameStart: 0,
-    frameEnd: 8,
-    frameRate: 12,
+  damage: 5,
 
-    activeFrames: [3,4,5,6,7],
+  frameStart: 0,
+  frameEnd: 8,
+  frameRate: 12,
 
-    hitboxWidth: 150,
-    hitboxHeight: 150,
-    hitboxOffsetX:-230,
-    hitboxOffsetY: -70,
+  activeFrames: [3, 4, 5],
 
-    secondaryAnimation: {
-      textureKey: 'move-scary-face',
-      animationKey: 'move-scary-face',
+  hitboxWidth: 270,
+  hitboxHeight: 90,
+  hitboxOffsetX: -210,
+  hitboxOffsetY: -35,
 
-      frameStart: 0,
-      frameEnd: 5,
-      frameRate: 20,
-
-      triggerFrame: 4,
-
-      // Distancia hacia delante de Gengar.
-      offsetX: -150,
-      offsetY: 0,
-      scale: 1
-    }
+  // Arco de aire frío durante la animación.
+  visualEffect: {
+    key: 'lick-arc',
+    triggerFrame: 5,
+    offsetX: 40,
+    offsetY: 10,
+    scale: 1
   },
+
+  // Efecto que aparece cuando golpea al rival.
+  hitVisualEffect: {
+    key: 'lick',
+    triggerFrame: 5,
+    scale: 1
+  }
+},
 
   undefined
 ];

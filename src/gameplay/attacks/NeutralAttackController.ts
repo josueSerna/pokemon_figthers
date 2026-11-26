@@ -2,17 +2,47 @@
 import Phaser from 'phaser';
 
 import type {
-  NeutralAttackDefinition
+  NeutralAttackDefinition,
+  NeutralVisualEffectDefinition
 } from './neutralAttackTypes';
 
 export type NeutralAttackType = 'melee' | 'ranged';
+
+export interface NeutralVisualEffectPlayer {
+  play(
+    effect: NeutralVisualEffectDefinition,
+    x: number,
+    y: number,
+    direction: 1 | -1,
+    depth: number,
+    scale?: number,
+    area?: NeutralVisualEffectArea
+  ): void;
+
+  destroy(): void;
+}
+
+export interface NeutralVisualEffectArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  headX: number;
+  headY: number;
+}
 
 export class NeutralAttackController {
   private readonly scene: Phaser.Scene;
   private readonly attacker: Phaser.GameObjects.Sprite;
   private readonly opponent: Phaser.Physics.Matter.Sprite;
   private readonly takeDamage: (amount: number) => void;
-  private readonly onAttackStateChange: (attacking: boolean) => void;
+
+  private readonly onAttackStateChange: (
+    attacking: boolean,
+    crouchingAttack: boolean
+  ) => void;
+
+  private readonly onHexStateChange: (active: boolean) => void;
 
   private readonly attacks: (NeutralAttackDefinition | undefined)[];
   private readonly crouchAttacks: (NeutralAttackDefinition | undefined)[];
@@ -21,18 +51,17 @@ export class NeutralAttackController {
   private readonly attackSprite: Phaser.GameObjects.Sprite;
   private readonly hitboxGraphics: Phaser.GameObjects.Graphics;
 
+  private readonly visualEffectPlayer?: NeutralVisualEffectPlayer;
+
   private secondarySprite?: Phaser.GameObjects.Sprite;
   private impactSprite?: Phaser.GameObjects.Sprite;
 
+  private hexStarted = false;
+  private hexTimer?: Phaser.Time.TimerEvent;
+
   private comboStates = {
-    standing: {
-      index: 0,
-      deadline: 0
-    },
-    crouching: {
-      index: 0,
-      deadline: 0
-    }
+    standing: { index: 0, deadline: 0 },
+    crouching: { index: 0, deadline: 0 }
   };
 
   private attacking = false;
@@ -40,11 +69,12 @@ export class NeutralAttackController {
   private bufferedCrouching = false;
   private hasHit = false;
   private secondaryPlayed = false;
+  private visualEffectPlayed = false;
+  private hitVisualEffectPlayed = false;
   private previousVisibility = true;
+  private isReversing = false;
 
   private currentAttack?: NeutralAttackDefinition;
-
-  // Posición vertical conservada durante los ataques terrestres.
   private attackBaseY = 0;
 
   constructor(
@@ -53,9 +83,14 @@ export class NeutralAttackController {
     opponent: Phaser.Physics.Matter.Sprite,
     takeDamage: (amount: number) => void,
     attacks: (NeutralAttackDefinition | undefined)[],
-    onAttackStateChange: (attacking: boolean) => void = () => {},
+    onAttackStateChange: (
+      attacking: boolean,
+      crouchingAttack: boolean
+    ) => void = () => {},
     crouchAttacks: (NeutralAttackDefinition | undefined)[] = [],
-    airAttack?: NeutralAttackDefinition
+    airAttack?: NeutralAttackDefinition,
+    visualEffectPlayer?: NeutralVisualEffectPlayer,
+    onHexStateChange: (active: boolean) => void = () => {}
   ) {
     this.scene = scene;
     this.attacker = attacker;
@@ -65,6 +100,8 @@ export class NeutralAttackController {
     this.crouchAttacks = crouchAttacks;
     this.onAttackStateChange = onAttackStateChange;
     this.airAttack = airAttack;
+    this.visualEffectPlayer = visualEffectPlayer;
+    this.onHexStateChange = onHexStateChange;
 
     const allAttacks = [
       ...this.attacks,
@@ -167,18 +204,14 @@ export class NeutralAttackController {
 
     if (frameStart < 0 || frameEnd > totalFrames) {
       console.error(
-        `[NeutralAttackController] Frames inválidos en "${animationKey}". ` +
-        `La textura "${textureKey}" tiene índices de 0 a ${totalFrames}.`
+        `[NeutralAttackController] Frames inválidos en "${animationKey}".`
       );
       return;
     }
 
     const frames = this.scene.anims.generateFrameNumbers(
       textureKey,
-      {
-        start: frameStart,
-        end: frameEnd
-      }
+      { start: frameStart, end: frameEnd }
     );
 
     if (frames.length === 0) {
@@ -200,11 +233,8 @@ export class NeutralAttackController {
     isCrouching = false,
     isAirborne = false
   ): void {
-    // Ataque aéreo independiente del combo terrestre.
     if (isAirborne) {
-      if (this.attacking || !this.airAttack) {
-        return;
-      }
+      if (this.attacking || !this.airAttack) return;
 
       if (
         !this.scene.textures.exists(this.airAttack.textureKey) ||
@@ -216,12 +246,12 @@ export class NeutralAttackController {
         return;
       }
 
-      this.startAttack(this.airAttack);
+      this.startAttack(this.airAttack, false);
       return;
     }
 
     const hasCrouchAttacks = this.crouchAttacks.some(
-      (attack) => !!attack
+      attack => !!attack
     );
 
     const useCrouchAttacks =
@@ -253,7 +283,6 @@ export class NeutralAttackController {
 
     let attack = selectedAttacks[comboState.index];
 
-    // Si no existe el ataque de esa posición, reiniciamos el combo.
     if (!attack) {
       comboState.index = 0;
       attack = selectedAttacks[0];
@@ -262,7 +291,7 @@ export class NeutralAttackController {
     if (!attack) {
       this.bufferedPress = false;
       this.bufferedCrouching = false;
-      this.onAttackStateChange(false);
+      this.onAttackStateChange(false, false);
       return;
     }
 
@@ -271,14 +300,13 @@ export class NeutralAttackController {
       !this.scene.anims.exists(attack.animationKey)
     ) {
       console.error(
-        `[NeutralAttackController] No se puede reproducir "${attack.animationKey}". ` +
-        'Falta su textura o animación.'
+        `[NeutralAttackController] No se puede reproducir "${attack.animationKey}". Falta su textura o animación.`
       );
 
       comboState.index = 0;
       this.bufferedPress = false;
       this.bufferedCrouching = false;
-      this.onAttackStateChange(false);
+      this.onAttackStateChange(false, false);
       return;
     }
 
@@ -287,18 +315,27 @@ export class NeutralAttackController {
 
     comboState.deadline = now + 900;
 
-    this.startAttack(attack);
+    this.startAttack(attack, useCrouchAttacks);
   }
 
-  private startAttack(attack: NeutralAttackDefinition): void {
+  private startAttack(
+    attack: NeutralAttackDefinition,
+    crouchingAttack = false
+  ): void {
     this.attacking = true;
     this.hasHit = false;
     this.secondaryPlayed = false;
+    this.visualEffectPlayed = false;
+    this.hitVisualEffectPlayed = false;
+    this.isReversing = false;
     this.currentAttack = attack;
 
-    this.onAttackStateChange(true);
+    this.hexStarted = false;
+    this.hexTimer?.remove();
+    this.hexTimer = undefined;
 
-    // Conservamos la altura inicial para los ataques terrestres.
+    this.onAttackStateChange(true, crouchingAttack);
+
     this.attackBaseY = this.attacker.y;
 
     this.previousVisibility = this.attacker.visible;
@@ -308,16 +345,47 @@ export class NeutralAttackController {
       .setTexture(attack.textureKey)
       .setVisible(true);
 
+    this.attackSprite.anims.timeScale = 1;
+
     this.syncAttackSprite();
 
     this.secondarySprite?.setVisible(false);
 
     this.attackSprite.once(
       'animationcomplete',
-      () => this.finishAttack()
+      () => this.handleAttackAnimationComplete()
     );
 
     this.attackSprite.anims.play(attack.animationKey);
+  }
+
+  private handleAttackAnimationComplete(): void {
+    const attack = this.currentAttack;
+
+    if (!attack) return;
+
+    // Hex debe terminar antes de finalizar el ataque.
+    if (this.hexStarted) return;
+
+    if (
+      attack.reverseOnMiss &&
+      !this.hasHit &&
+      !this.isReversing
+    ) {
+      this.isReversing = true;
+
+      this.attackSprite.once(
+        'animationcomplete',
+        () => this.finishAttack()
+      );
+
+      this.attackSprite.anims.playReverse(attack.animationKey);
+      this.attackSprite.anims.timeScale = 3;
+
+      return;
+    }
+
+    this.finishAttack();
   }
 
   update(): void {
@@ -329,8 +397,28 @@ export class NeutralAttackController {
       this.attackSprite.anims.currentFrame?.index ?? -1;
 
     this.updateSecondaryAnimation(frame);
+    this.updateVisualEffect(frame);
 
-    const active = this.currentAttack.activeFrames.includes(frame);
+    if (this.isReversing) {
+      this.hitboxGraphics.clear();
+      return;
+    }
+
+    // Durante Hex, la hitbox permanece activa.
+    if (this.hexStarted) {
+      const hitbox = this.getHitbox(this.currentAttack);
+
+      this.drawHitbox(hitbox);
+
+      if (!this.hasHit) {
+        this.checkHitbox(hitbox, this.currentAttack);
+      }
+
+      return;
+    }
+
+    const active =
+      this.currentAttack.activeFrames.includes(frame);
 
     if (!active) {
       this.hitboxGraphics.clear();
@@ -339,19 +427,161 @@ export class NeutralAttackController {
 
     const hitbox = this.getHitbox(this.currentAttack);
 
-    this.hitboxGraphics.clear();
-
-    this.hitboxGraphics
-      .fillStyle(0xff3333, 0.25)
-      .fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
-
-    this.hitboxGraphics
-      .lineStyle(2, 0xff3333, 1)
-      .strokeRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
+    this.drawHitbox(hitbox);
 
     if (!this.hasHit) {
       this.checkHitbox(hitbox, this.currentAttack);
     }
+  }
+
+  private drawHitbox(hitbox: Phaser.Geom.Rectangle): void {
+    this.hitboxGraphics.clear();
+
+    this.hitboxGraphics
+      .fillStyle(0xff3333, 0.25)
+      .fillRect(
+        hitbox.x,
+        hitbox.y,
+        hitbox.width,
+        hitbox.height
+      );
+
+    this.hitboxGraphics
+      .lineStyle(2, 0xff3333, 1)
+      .strokeRect(
+        hitbox.x,
+        hitbox.y,
+        hitbox.width,
+        hitbox.height
+      );
+  }
+
+  private startHex(): void {
+    if (this.hexStarted) return;
+
+    this.hexStarted = true;
+
+    this.onHexStateChange(true);
+
+    this.hexTimer = this.scene.time.delayedCall(2000, () => {
+      this.onHexStateChange(false);
+
+      this.hexStarted = false;
+      this.hexTimer = undefined;
+
+      this.finishAttack();
+    });
+  }
+
+  private updateVisualEffect(frame: number): void {
+    const effect = this.currentAttack?.visualEffect;
+
+    if (
+      !effect ||
+      effect.triggerOnHit ||
+      this.visualEffectPlayed
+    ) {
+      return;
+    }
+
+    if (frame < effect.triggerFrame) return;
+
+    if (!this.visualEffectPlayer) {
+      console.warn(
+        '[NeutralAttackController] No hay visualEffectPlayer conectado.'
+      );
+      return;
+    }
+
+    this.visualEffectPlayed = true;
+
+    // Activar el temporizador de Hex al disparar su efecto.
+    if (effect.key === 'hex-vortex') {
+      this.startHex();
+    }
+
+    const direction: 1 | -1 =
+      this.attacker.flipX ? 1 : -1;
+
+    const scale = Math.abs(this.attacker.scaleX);
+
+    this.visualEffectPlayer.play(
+      effect,
+      this.attacker.x + (effect.offsetX ?? 0) * direction,
+      this.attackBaseY + (effect.offsetY ?? 0),
+      direction,
+      this.attacker.depth + 3,
+      scale
+    );
+  }
+
+  private playHitVisualEffect(
+    attack: NeutralAttackDefinition,
+    hurtboxParts: MatterJS.BodyType[]
+  ): void {
+    const effect =
+      attack.hitVisualEffect ??
+      (attack.visualEffect?.triggerOnHit
+        ? attack.visualEffect
+        : undefined);
+
+    if (
+      !effect ||
+      this.hitVisualEffectPlayed ||
+      !this.visualEffectPlayer ||
+      hurtboxParts.length === 0
+    ) {
+      return;
+    }
+
+    this.hitVisualEffectPlayed = true;
+
+    const minX = Math.min(
+      ...hurtboxParts.map(part => part.bounds.min.x)
+    );
+
+    const maxX = Math.max(
+      ...hurtboxParts.map(part => part.bounds.max.x)
+    );
+
+    const minY = Math.min(
+      ...hurtboxParts.map(part => part.bounds.min.y)
+    );
+
+    const maxY = Math.max(
+      ...hurtboxParts.map(part => part.bounds.max.y)
+    );
+
+    const headPart = hurtboxParts[0];
+
+    const headX =
+      (headPart.bounds.min.x + headPart.bounds.max.x) / 2;
+
+    const headY = headPart.bounds.min.y;
+
+    const area: NeutralVisualEffectArea = {
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      headX,
+      headY
+    };
+
+    const direction: 1 | -1 =
+      this.attacker.flipX ? -1 : 1;
+
+    const scale = Math.abs(this.opponent.scaleX);
+
+    this.visualEffectPlayer.play(
+      effect,
+      area.x + area.width / 2,
+      area.y + area.height / 2,
+      direction,
+      this.opponent.depth + 5,
+      scale,
+      area
+    );
   }
 
   private updateSecondaryAnimation(frame: number): void {
@@ -441,10 +671,6 @@ export class NeutralAttackController {
     );
   }
 
-  // --------------------------------------------------
-  // COLISIÓN CONTRA LAS HURTBOXES
-  // --------------------------------------------------
-
   private checkHitbox(
     hitbox: Phaser.Geom.Rectangle,
     attack: NeutralAttackDefinition
@@ -453,8 +679,6 @@ export class NeutralAttackController {
 
     if (!body) return;
 
-    // Excluimos la parte principal del cuerpo compuesto.
-    // Las partes restantes son cabeza, torso y piernas.
     const hurtboxParts =
       body.parts.length > 1
         ? body.parts.slice(1)
@@ -480,9 +704,15 @@ export class NeutralAttackController {
       }
 
       this.hasHit = true;
+
       this.takeDamage(attack.damage);
 
       this.showImpact(attack, hurtboxBounds);
+
+      this.playHitVisualEffect(
+        attack,
+        hurtboxParts
+      );
 
       return;
     }
@@ -544,6 +774,17 @@ export class NeutralAttackController {
   }
 
   private finishAttack(): void {
+    this.hexTimer?.remove();
+    this.hexTimer = undefined;
+
+    if (this.hexStarted) {
+      this.onHexStateChange(false);
+      this.hexStarted = false;
+    }
+
+    this.isReversing = false;
+    this.attackSprite.anims.timeScale = 1;
+
     this.attacking = false;
     this.currentAttack = undefined;
 
@@ -564,7 +805,7 @@ export class NeutralAttackController {
       return;
     }
 
-    this.onAttackStateChange(false);
+    this.onAttackStateChange(false, false);
   }
 
   destroy(): void {
@@ -572,7 +813,15 @@ export class NeutralAttackController {
       this.attacker.setVisible(this.previousVisibility);
     }
 
-    this.onAttackStateChange(false);
+    this.hexTimer?.remove();
+    this.hexTimer = undefined;
+
+    if (this.hexStarted) {
+      this.onHexStateChange(false);
+      this.hexStarted = false;
+    }
+
+    this.onAttackStateChange(false, false);
 
     this.attackSprite.destroy();
     this.hitboxGraphics.destroy();
@@ -580,9 +829,12 @@ export class NeutralAttackController {
     this.secondarySprite?.destroy();
     this.impactSprite?.destroy();
 
+    this.visualEffectPlayer?.destroy();
+
     this.attacking = false;
     this.bufferedPress = false;
     this.bufferedCrouching = false;
+    this.isReversing = false;
     this.currentAttack = undefined;
   }
 }

@@ -17,6 +17,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 720,
   parent: 'game-container',
 
+
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
@@ -34,7 +35,7 @@ const config: Phaser.Types.Core.GameConfig = {
   },
 
   scene: [
-      // HurtboxTestScene,
+    HurtboxTestScene,
     IntroScene,
     MainMenuScene,
     PlaySelectScene,

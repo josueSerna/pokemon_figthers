@@ -24,6 +24,16 @@ export interface NeutralSecondaryAnimation {
   scale: number;
 }
 
+export interface NeutralVisualEffectDefinition {
+  key: string;
+  triggerFrame: number;
+  offsetX?: number;
+  offsetY?: number;
+  scale?: number;
+  rotation?: number;
+  triggerOnHit?: boolean;
+}
+
 export interface NeutralAttackDefinition {
   type: NeutralAttackType;
   animationKey: string;
@@ -39,7 +49,10 @@ export interface NeutralAttackDefinition {
   hitboxOffsetY: number;
   secondaryAnimation?: NeutralSecondaryAnimation;
   impact?: NeutralImpactDefinition;
+  visualEffect?: NeutralVisualEffectDefinition;
+  hitVisualEffect?: NeutralVisualEffectDefinition;
   followAttackerY?: boolean;
+  reverseOnMiss?: boolean;
 }
 
 export interface CharacterNeutralAttackConfig {

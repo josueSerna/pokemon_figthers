@@ -2,7 +2,7 @@
 import Phaser from 'phaser';
 
 import type { CharacterDefinition } from '../../characters/types';
-import type { HurtboxController } from './HurtBoxController';
+import type { HurtboxController } from './hurtboxes/HurtBoxController';
 
 interface FighterBodyFactoryConfig {
   scene: Phaser.Scene;

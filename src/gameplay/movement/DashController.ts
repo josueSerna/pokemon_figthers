@@ -7,6 +7,8 @@ import type { AnimationController } from '../animations/AnimationController';
 
 const DEFAULT_DASH_WINDOW = 250;
 
+type DashType = 'forward' | 'back';
+
 export class DashController {
   private static readonly DASH_ATTACK_START_FRAME = 4;
   private static readonly DASH_ATTACK_END_FRAME = 6;
@@ -23,6 +25,7 @@ export class DashController {
 
   private dashTapTimer = 0;
   private dashDirection: -1 | 1 = 1;
+  private dashType: DashType = 'forward';
 
   constructor(
     fighter: Phaser.Physics.Matter.Sprite,
@@ -42,32 +45,20 @@ export class DashController {
     return this.dashing;
   }
 
-get isAttackWindow() {
-  const currentFrame =
-    this.animations.getCurrentFrameIndex('dash');
+  get isAttackWindow() {
+    if (!this.dashing || this.dashType !== 'forward' || this.dashAttackStarted) {
+      return false;
+    }
 
-  if (this.dashing) {
-    console.log({
-      dashPlaying: this.animations.isPlaying('dash'),
-      currentFrame,
-      dashAttackStarted: this.dashAttackStarted,
-      attackWindow:
-        currentFrame !== undefined &&
-        currentFrame >= DashController.DASH_ATTACK_START_FRAME &&
-        currentFrame <= DashController.DASH_ATTACK_END_FRAME
-    });
+    const currentFrame =
+      this.animations.getCurrentFrameIndex('dash');
+
+    return (
+      currentFrame !== undefined &&
+      currentFrame >= DashController.DASH_ATTACK_START_FRAME &&
+      currentFrame <= DashController.DASH_ATTACK_END_FRAME
+    );
   }
-
-  if (!this.dashing || this.dashAttackStarted) {
-    return false;
-  }
-
-  return (
-    currentFrame !== undefined &&
-    currentFrame >= DashController.DASH_ATTACK_START_FRAME &&
-    currentFrame <= DashController.DASH_ATTACK_END_FRAME
-  );
-}
 
   updateInput(
     delta: number,
@@ -78,7 +69,11 @@ get isAttackWindow() {
   ) {
     const dashConfig = this.definition.dash;
 
-    if (!dashConfig || !this.animations.has('dash')) {
+    if (
+      !dashConfig ||
+      !this.animations.has('dash') ||
+      !this.animations.has('dash-back')
+    ) {
       return;
     }
 
@@ -117,18 +112,43 @@ get isAttackWindow() {
       ? 'moveRight'
       : 'moveLeft';
 
-    if (!this.input.justPressed(forwardAction)) {
+    const backwardAction = facingRight
+      ? 'moveLeft'
+      : 'moveRight';
+
+    let pressedDirection: DashType | null = null;
+    let direction: -1 | 1 = 1;
+
+    if (this.input.justPressed(forwardAction)) {
+      pressedDirection = 'forward';
+      direction = facingRight ? 1 : -1;
+    } else if (this.input.justPressed(backwardAction)) {
+      pressedDirection = 'back';
+      direction = facingRight ? -1 : 1;
+    }
+
+    if (!pressedDirection) {
       return;
     }
 
     if (this.waitingForSecondDashTap) {
+      if (this.dashType !== pressedDirection) {
+        this.waitingForSecondDashTap = false;
+        this.dashTapTimer = 0;
+
+        this.dashType = pressedDirection;
+        this.waitingForSecondDashTap = true;
+        return;
+      }
+
       this.waitingForSecondDashTap = false;
       this.dashTapTimer = 0;
 
-      this.startDash(facingRight ? 1 : -1);
+      this.startDash(direction, pressedDirection);
       return;
     }
 
+    this.dashType = pressedDirection;
     this.waitingForSecondDashTap = true;
     this.dashTapTimer = 0;
   }
@@ -182,6 +202,11 @@ get isAttackWindow() {
     );
 
     this.animations.offComplete(
+      'dash-back',
+      this.finishDash
+    );
+
+    this.animations.offComplete(
       'dashAttack',
       this.finishDash
     );
@@ -193,14 +218,20 @@ get isAttackWindow() {
     this.cancel();
   }
 
-  private startDash(direction: -1 | 1) {
+  private startDash(
+    direction: -1 | 1,
+    type: DashType
+  ) {
     const dashConfig = this.definition.dash;
+
+    const animationKey =
+      type === 'forward' ? 'dash' : 'dash-back';
 
     if (
       !dashConfig ||
       dashConfig.speed <= 0 ||
       this.dashing ||
-      !this.animations.has('dash')
+      !this.animations.has(animationKey)
     ) {
       return;
     }
@@ -208,6 +239,7 @@ get isAttackWindow() {
     this.dashing = true;
     this.dashAttackStarted = false;
     this.dashDirection = direction;
+    this.dashType = type;
 
     this.waitingForSecondDashTap = false;
     this.dashTapTimer = 0;
@@ -217,11 +249,11 @@ get isAttackWindow() {
     );
 
     this.animations.onComplete(
-      'dash',
+      animationKey,
       this.finishDash
     );
 
-    this.animations.play('dash', false);
+    this.animations.play(animationKey, false);
   }
 
   private readonly finishDash = () => {
@@ -234,6 +266,11 @@ get isAttackWindow() {
 
     this.animations.offComplete(
       'dash',
+      this.finishDash
+    );
+
+    this.animations.offComplete(
+      'dash-back',
       this.finishDash
     );
 

@@ -22,6 +22,26 @@ import {
   NeutralAttackController
 } from '../gameplay/attacks/NeutralAttackController';
 
+import type {
+  NeutralVisualEffectPlayer
+} from '../gameplay/attacks/NeutralAttackController';
+
+import {
+  ShadowClawEffect
+} from '../gameplay/effects/movements/ShadowClaw/ShadowClawEffect';
+
+import {
+  AstonishEffect
+} from '../gameplay/effects/movements/Astonish/AstonishEffect';
+
+import {
+  LickEffect
+} from '../gameplay/effects/movements/Lick/LickEffect';
+
+import {
+  NeutralVisualEffectGroup
+} from '../gameplay/effects/NeutralVisualEffectGroup';
+
 import {
   getDefaultStage,
   getStageById
@@ -163,6 +183,19 @@ export class GameScene extends Phaser.Scene {
   preload() {
     StageController.preload(this, this.stage);
 
+    const shadowClawKey = 'shadow-claw';
+
+    if (!this.textures.exists(shadowClawKey)) {
+      this.load.spritesheet(
+        shadowClawKey,
+        '/assets/movements/shadow_claw.png',
+        {
+          frameWidth: 256,
+          frameHeight: 256
+        }
+      );
+    }
+
     const unique = new Map<
       string,
       CharacterDefinition
@@ -227,7 +260,6 @@ export class GameScene extends Phaser.Scene {
 
     const groundY = this.stage.groundY ?? 700;
 
-    // Suelo visible.
     this.add
       .rectangle(
         this.screenWidth / 2,
@@ -239,7 +271,6 @@ export class GameScene extends Phaser.Scene {
       )
       .setStrokeStyle(2, 0x00ff00, 1);
 
-    // Suelo físico de Matter.
     this.matter.add.rectangle(
       this.screenWidth / 2,
       groundY + 10,
@@ -252,7 +283,6 @@ export class GameScene extends Phaser.Scene {
       }
     );
 
-    // Límite izquierdo.
     this.matter.add.rectangle(
       -10,
       this.screenHeight / 2,
@@ -264,7 +294,6 @@ export class GameScene extends Phaser.Scene {
       }
     );
 
-    // Límite derecho.
     this.matter.add.rectangle(
       this.screenWidth + 10,
       this.screenHeight / 2,
@@ -480,14 +509,56 @@ export class GameScene extends Phaser.Scene {
     const crouching = neutral.crouching ?? [];
     const air = neutral.air;
 
-    const hasAttacks =
-      standing.some(Boolean) ||
-      crouching.some(Boolean) ||
-      !!air;
+    const allAttacks = [
+      ...standing,
+      ...crouching,
+      air
+    ];
 
-    if (!hasAttacks) {
+    if (!allAttacks.some(Boolean)) {
       return undefined;
     }
+
+    const effectPlayers: NeutralVisualEffectPlayer[] = [];
+
+    const hasShadowClaw = allAttacks.some(
+      (attack) =>
+        attack?.visualEffect?.key === 'shadow-claw'
+    );
+
+    const hasAstonish = allAttacks.some(
+      (attack) =>
+        attack?.visualEffect?.key === 'astonish'
+    );
+
+    const hasLick = allAttacks.some(
+      (attack) =>
+        attack?.visualEffect?.key === 'lick' ||
+        attack?.hitVisualEffect?.key === 'lick'
+    );
+
+    if (hasShadowClaw) {
+      effectPlayers.push(
+        new ShadowClawEffect(this)
+      );
+    }
+
+    if (hasAstonish) {
+      effectPlayers.push(
+        new AstonishEffect(this)
+      );
+    }
+
+    if (hasLick) {
+      effectPlayers.push(
+        new LickEffect(this)
+      );
+    }
+
+    const visualEffectPlayer =
+      effectPlayers.length > 0
+        ? new NeutralVisualEffectGroup(effectPlayers)
+        : undefined;
 
     return new NeutralAttackController(
       this,
@@ -497,11 +568,21 @@ export class GameScene extends Phaser.Scene {
         opponent.takeDamage(damage);
       },
       [...standing],
-      (attacking: boolean) => {
-        attacker.setNeutralAttacking(attacking);
+      (
+        attacking: boolean,
+        crouchingAttack: boolean
+      ) => {
+        attacker.setNeutralAttacking(
+          attacking,
+          crouchingAttack
+        );
       },
       [...crouching],
-      air
+      air,
+      visualEffectPlayer,
+      (active: boolean) => {
+        attacker.setHexActive(active);
+      }
     );
   }
 

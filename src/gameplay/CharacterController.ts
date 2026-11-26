@@ -1,64 +1,42 @@
 
 import Phaser from 'phaser';
 
-import type {
-  CharacterDefinition
-} from '../characters/types';
+import type { CharacterDefinition } from '../characters/types';
 
-import {
-  AbilityController
-} from './abilities/AbilityController';
+import { AbilityController } from './abilities/AbilityController';
+import type { FighterAbility } from './abilities/types';
 
-import type {
-  FighterAbility
-} from './abilities/types';
+import { InputManager } from './input/InputManager';
 
-import {
-  InputManager
-} from './input/InputManager';
+import { MovementController } from './movement/MovementController';
+import { DashController } from './movement/DashController';
 
-import {
-  MovementController
-} from './movement/MovementController';
+import { HurtboxController } from './physics/hurtboxes/HurtBoxController';
+import { FighterBodyFactory } from './physics/FighterBodyFactory';
 
-import {
-  DashController
-} from './movement/DashController';
+import { CollisionDebugger } from './debug/CollisionDebugger';
+import { VisualSyncController } from './visual/VisualSyncController';
 
-import {
-  HurtboxController
-} from './physics/HurtBoxController';
+import { AnimationController } from './animations/AnimationController';
+import { JumpAnimationController } from './animations/movement/JumpAnimationController';
 
-import {
-  FighterBodyFactory
-} from './physics/FighterBodyFactory';
+import { DashAttackController } from './attacks/DashAttackController';
+import { HitStopController } from './effects/HitStopController';
 
-import {
-  CollisionDebugger
-} from './debug/CollisionDebugger';
+import { PushboxController } from './physics/pushboxes/PushboxController';
 
-import {
-  VisualSyncController
-} from './visual/VisualSyncController';
+import { CrouchVortexEffect } from '../gameplay/effects/elements_pokemon/Crouch/CrouchVortexEffect';
+import { HexVortexEffect } from '../gameplay/effects/movements/Hex/HexVortexEffect';
 
-import {
-  AnimationController
-} from './animations/AnimationController';
+const PUSHBOX_WIDTH = 70;
+const PUSHBOX_HEIGHT = 150;
+const CROUCH_PUSHBOX_HEIGHT = 70;
 
-import {
-  JumpAnimationController
-} from './animations/movement/JumpAnimationController';
-
-import {
-  DashAttackController
-} from './attacks/DashAttackController';
-
-import {
-  HitStopController
-} from './effects/HitStopController';
-
-const PUSHBOX_WIDTH = 72;
-const PUSHBOX_HEIGHT = 110;
+const PUSHBOX_OFFSETS: Record<string, number> = {
+  charizard: 20,
+  gengar: 0,
+  lucario: 0
+};
 
 const KNOCKBACK_PROTECTION_MS = 450;
 
@@ -85,6 +63,10 @@ export class CharacterController {
 
   private readonly collisionDebugger: CollisionDebugger;
   private readonly visualSyncController: VisualSyncController;
+  private readonly pushboxController: PushboxController;
+
+  private readonly crouchVortexEffect?: CrouchVortexEffect;
+  private readonly hexVortexEffect?: HexVortexEffect;
 
   private dashAttackController?: DashAttackController;
 
@@ -100,6 +82,9 @@ export class CharacterController {
 
   private takingDamage = false;
   private neutralAttacking = false;
+
+  private crouchAttackActive = false;
+  private hexActive = false;
 
   private knockbackRemaining = 0;
 
@@ -124,20 +109,26 @@ export class CharacterController {
     this.abilities = abilities;
     this.groundY = groundY;
 
-    this.animationPrefix =
-      `${playerId}-${definition.id}`;
+    this.animationPrefix = `${playerId}-${definition.id}`;
 
     this.health = definition.stats.maxHealth;
 
-    this.jumpsRemaining =
-      definition.stats.maxJumps;
+    this.jumpsRemaining = definition.stats.maxJumps;
 
-    const idleAsset =
-      definition.assets.spriteSheets.idle;
+    const idleAsset = definition.assets.spriteSheets.idle;
 
     this.visual = scene.add
       .sprite(spawnX, 348, idleAsset.key, 0)
       .setScale(definition.visualScale);
+
+    if (definition.id === 'gengar') {
+      this.crouchVortexEffect = new CrouchVortexEffect(
+        scene,
+        this.visual
+      );
+
+      this.hexVortexEffect = new HexVortexEffect(scene);
+    }
 
     this.hurtboxController = new HurtboxController(
       this.scene,
@@ -160,14 +151,20 @@ export class CharacterController {
       this.visual
     );
 
+    this.pushboxController = new PushboxController(
+      this.fighter,
+      this.visual,
+      this.definition.id,
+      this.groundY
+    );
+
     this.abilityController = new AbilityController(
       this.abilities,
       {
         scene: this.scene,
         fighter: this.fighter,
         opponent: this.opponent,
-        animationKey: (key) =>
-          this.animationKey(key)
+        animationKey: (key) => this.animationKey(key)
       },
       this.input
     );
@@ -192,10 +189,9 @@ export class CharacterController {
       this.animationController
     );
 
-    this.jumpAnimationController =
-      new JumpAnimationController(
-        this.animationController
-      );
+    this.jumpAnimationController = new JumpAnimationController(
+      this.animationController
+    );
 
     this.collisionDebugger = new CollisionDebugger(
       this.scene,
@@ -227,30 +223,27 @@ export class CharacterController {
 
     this.dashAttackController?.destroy();
 
-    this.dashAttackController =
-      new DashAttackController(
-        this.scene,
-        this.visual,
-        this.opponent.fighter,
-        this.definition,
-        this.input,
-        this.animationController,
-        this.dashController,
-        this.opponent.takeDamage
-      );
+    this.dashAttackController = new DashAttackController(
+      this.scene,
+      this.visual,
+      this.opponent.fighter,
+      this.definition,
+      this.input,
+      this.animationController,
+      this.dashController,
+      this.opponent.takeDamage
+    );
   }
 
   // ACTUALIZACIÓN
 
   update(delta = 16.6667) {
-    // No actualizar durante el hitstop.
     if (HitStopController.isActive(this.scene)) {
       return;
     }
 
     this.visualSyncController.update();
 
-    // Reducir el tiempo de protección del knockback.
     if (this.knockbackRemaining > 0) {
       this.knockbackRemaining = Math.max(
         0,
@@ -258,14 +251,9 @@ export class CharacterController {
       );
     }
 
-    const knockbackActive =
-      this.knockbackRemaining > 0;
-
-    // HABILIDADES
+    const knockbackActive = this.knockbackRemaining > 0;
 
     this.abilityController.update();
-
-    // INPUTS
 
     const left = this.input.isDown('moveLeft');
     const right = this.input.isDown('moveRight');
@@ -273,17 +261,22 @@ export class CharacterController {
 
     const grounded = this.isGrounded();
 
+    const showCrouchVortex =
+      (crouching && grounded) ||
+      (this.neutralAttacking && this.crouchAttackActive);
+
+    this.crouchVortexEffect?.update(
+      showCrouchVortex && !this.hexActive
+    );
+
     if (grounded) {
-      this.jumpsRemaining =
-        this.definition.stats.maxJumps;
+      this.jumpsRemaining = this.definition.stats.maxJumps;
     } else {
       this.movementController.applyGravity(delta);
     }
 
     const abilityBlocksMovement =
       this.abilityController.blocksMovement();
-
-    // DASH
 
     this.dashController.updateInput(
       delta,
@@ -293,16 +286,11 @@ export class CharacterController {
       abilityBlocksMovement
     );
 
-    // ATAQUE DEL DASH
-
     this.dashAttackController?.update();
 
-    // Detener la actualización si comienza el hitstop.
     if (HitStopController.isActive(this.scene)) {
       return;
     }
-
-    // MOVIMIENTO HORIZONTAL
 
     if (this.dashController.isDashing) {
       this.dashController.updateMovement();
@@ -345,15 +333,12 @@ export class CharacterController {
 
       this.jumpsRemaining--;
 
-      this.jumpAnimationController.startJump(
-        isSecondJump
-      );
+      this.jumpAnimationController.startJump(isSecondJump);
     }
 
-    // ACTUALIZACIÓN DE LA FÍSICA DEL SALTO
+    // FÍSICA DEL SALTO
 
-    const body =
-      this.fighter.body as MatterJS.BodyType | null;
+    const body = this.fighter.body as MatterJS.BodyType | null;
 
     this.jumpAnimationController.setPhysics({
       velocityY: this.fighter.getVelocity().y,
@@ -376,8 +361,7 @@ export class CharacterController {
       this.opponent.fighter?.x ??
       this.opponent.x;
 
-    const opponentIsLeft =
-      opponentX < this.fighter.x;
+    const opponentIsLeft = opponentX < this.fighter.x;
 
     const defaultFlipX =
       this.definition.defaultFlipX ?? false;
@@ -422,6 +406,10 @@ export class CharacterController {
 
     this.dashAttackController = undefined;
 
+    this.hexVortexEffect?.destroy();
+
+    this.crouchVortexEffect?.destroy();
+
     this.dashController.destroy();
 
     this.abilityController.destroy();
@@ -457,19 +445,9 @@ export class CharacterController {
   // PUSHBOX
 
   getPushboxBounds() {
-    const centerX = this.fighter.x;
-    const centerY = this.fighter.y;
-
-    return {
-      left: centerX - PUSHBOX_WIDTH / 2,
-      right: centerX + PUSHBOX_WIDTH / 2,
-      top: centerY - PUSHBOX_HEIGHT / 2,
-      bottom: centerY + PUSHBOX_HEIGHT / 2,
-      centerX,
-      centerY,
-      width: PUSHBOX_WIDTH,
-      height: PUSHBOX_HEIGHT
-    };
+    return this.pushboxController.getBounds(
+      this.isCrouching()
+    );
   }
 
   moveByPushboxX(amount: number) {
@@ -477,8 +455,7 @@ export class CharacterController {
       return;
     }
 
-    const body =
-      this.fighter.body as MatterJS.BodyType | null;
+    const body = this.fighter.body as MatterJS.BodyType | null;
 
     if (!body) {
       return;
@@ -494,14 +471,39 @@ export class CharacterController {
 
   // ATAQUES Y DAÑO
 
-  setNeutralAttacking(attacking: boolean) {
+  setNeutralAttacking(
+    attacking: boolean,
+    crouchingAttack = false
+  ) {
     this.neutralAttacking = attacking;
+
+    this.crouchAttackActive =
+      attacking && crouchingAttack;
 
     if (attacking) {
       this.dashController.cancel();
 
       this.fighter.setVelocityX(0);
     }
+  }
+
+  setHexActive(active: boolean) {
+    this.hexActive = active;
+
+    if (active) {
+      this.crouchVortexEffect?.update(false);
+
+      this.hexVortexEffect?.play(
+        this.visual.x,
+        this.visual.y,
+        this.visual.depth + 5,
+        Math.abs(this.visual.scaleX)
+      );
+
+      return;
+    }
+
+    this.hexVortexEffect?.stop();
   }
 
   takeDamage(amount: number) {
@@ -527,12 +529,9 @@ export class CharacterController {
 
     this.takingDamage = true;
 
-    // Proteger el empuje después del golpe.
-    this.knockbackRemaining =
-      KNOCKBACK_PROTECTION_MS;
+    this.knockbackRemaining = KNOCKBACK_PROTECTION_MS;
 
-    const animationKey =
-      this.animationKey('takeDamage');
+    const animationKey = this.animationKey('takeDamage');
 
     this.visual.anims.play(animationKey, true);
 
@@ -547,8 +546,7 @@ export class CharacterController {
   // DETECCIÓN DEL SUELO
 
   private isGrounded(): boolean {
-    const body =
-      this.fighter.body as MatterJS.BodyType | null;
+    const body = this.fighter.body as MatterJS.BodyType | null;
 
     if (!body) {
       return false;
@@ -601,10 +599,11 @@ export class CharacterController {
         : left;
 
       this.playAnimation(
-        movingBackward &&
-        this.hasAnimation('walk-back')
-          ? 'walk-back'
-          : 'walk'
+        movingBackward
+          ? 'walk'
+          : this.hasAnimation('walk-back')
+            ? 'walk-back'
+            : 'walk'
       );
     } else {
       this.playAnimation('idle');
